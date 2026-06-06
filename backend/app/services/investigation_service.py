@@ -24,6 +24,7 @@ from typing import Any
 from sqlalchemy import desc, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.events import EventType, publish_event
 from app.core.logging import get_logger
 from app.models import AgentDecision, Alert, AlertArtifact, NetworkEvent
 from app.models.enums import AgentName, AlertStatus, ArtifactKind
@@ -146,6 +147,15 @@ async def investigate_alert(
         n_alerts=stats.related_alert_count,
         truncated=packet.truncated,
     )
+    if commit:
+        await publish_event(
+            EventType.ALERT_INVESTIGATED,
+            {
+                "alert_id": alert.id,
+                "n_related_alerts": stats.related_alert_count,
+                "n_related_events": stats.related_event_count,
+            },
+        )
     return artifact, packet
 
 

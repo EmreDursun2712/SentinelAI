@@ -22,6 +22,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
+from app.core.events import EventType, publish_event
 from app.core.logging import get_logger
 from app.models import AgentDecision, Alert, ResponseAction
 from app.models.enums import (
@@ -31,7 +32,7 @@ from app.models.enums import (
     ResponseActionType,
     ResponseStatus,
 )
-from app.services.response_rules import Recommendation, recommend_actions
+from app.services.response_rules import recommend_actions
 
 logger = get_logger(__name__)
 
@@ -144,6 +145,21 @@ async def recommend_for_alert(
         auto=has_auto_executed,
         pending=has_pending,
     )
+    # Only broadcast on the committing (endpoint) path. When commit=False the
+    # Detection orchestrator already emits alert.responded after its commit.
+    if commit:
+        n_auto = sum(1 for a in persisted if a.executed)
+        n_pending = sum(1 for a in persisted if a.status == ResponseStatus.PENDING)
+        if n_auto:
+            await publish_event(
+                EventType.RESPONSE_ACTION_EXECUTED,
+                {"alert_id": alert.id, "count": n_auto},
+            )
+        if n_pending:
+            await publish_event(
+                EventType.RESPONSE_ACTION_PENDING,
+                {"alert_id": alert.id, "count": n_pending},
+            )
     return persisted
 
 
@@ -188,6 +204,18 @@ async def approve_action(
     await session.commit()
     await session.refresh(action)
     await session.refresh(alert)
+
+    await publish_event(
+        EventType.RESPONSE_ACTION_EXECUTED,
+        {
+            "action_id": action.id,
+            "alert_id": alert.id,
+            "action_type": action.action_type.value,
+        },
+    )
+    # SUPPRESS_ALERT closes the alert as a side effect.
+    if alert.status == AlertStatus.CLOSED:
+        await publish_event(EventType.ALERT_CLOSED, {"alert_id": alert.id})
     return action
 
 
@@ -226,6 +254,15 @@ async def reject_action(
 
     await session.commit()
     await session.refresh(action)
+
+    await publish_event(
+        EventType.RESPONSE_ACTION_REJECTED,
+        {
+            "action_id": action.id,
+            "alert_id": action.alert_id,
+            "action_type": action.action_type.value,
+        },
+    )
     return action
 
 

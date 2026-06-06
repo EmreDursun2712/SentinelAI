@@ -161,16 +161,59 @@ Every non-2xx response has this shape:
 | POST   | `/api/v1/detection/events/{id}`       | Detect a stored event; persists alert         |
 | POST   | `/api/v1/detection/batch`             | Detect a list of event_ids; persists          |
 | POST   | `/api/v1/detection/run`               | Process recent un-detected events             |
-| WS     | `/api/v1/stream`                      | Event stream (alert.*, action.*)              |
+| WS     | `/api/v1/stream`                      | Authenticated live event stream (see below)   |
 
 See [INGESTION.md](INGESTION.md) for the CSV schema, [DETECTION.md](DETECTION.md) for the inference flow, [TRIAGE.md](TRIAGE.md) for severity/priority rules and analyst dispositions, [RESPONSE.md](RESPONSE.md) for recommendation policy and the approval flow, [INVESTIGATION.md](INVESTIGATION.md) for evidence gathering and the summary packet, and [REPORTING.md](REPORTING.md) for incident-report generation and daily summaries.
 
-## Event stream payloads
+## Event stream (WebSocket)
 
-```json
-{ "type": "alert.created",     "payload": { "id": 42, "severity": null } }
-{ "type": "alert.triaged",     "payload": { "id": 42, "severity": "HIGH" } }
-{ "type": "alert.responded",   "payload": { "id": 42, "action": "BLOCK_IP", "simulated": true } }
-{ "type": "alert.investigated","payload": { "id": 42 } }
-{ "type": "alert.reported",    "payload": { "id": 42, "report_id": 7 } }
+The dashboard subscribes to `/api/v1/stream` for live updates instead of waiting
+on polling. The backend publishes an event **after the DB commit succeeds** for
+each state change, so rolled-back work is never broadcast.
+
+### Connecting & auth
+
+Browsers can't set an `Authorization` header on a WebSocket, so the JWT is passed
+as a query parameter (a `access_token,<jwt>` subprotocol is also accepted):
+
 ```
+ws://localhost:8000/api/v1/stream?token=<JWT>
+```
+
+An invalid or missing token is rejected with close code **1008** before the
+handshake completes. On success the server sends `stream.connected`, then every
+event, plus a `stream.heartbeat` every ~25s to keep the link alive. Broken
+sockets are detected on send and dropped server-side. The client reconnects with
+exponential backoff.
+
+### Event types
+
+Payloads are intentionally small (ids, status, severity, counts) — never full
+artifacts. Frames have the shape `{ "type", "payload", "ts" }`.
+
+| Type                          | Payload (keys)                                   |
+| ----------------------------- | ------------------------------------------------ |
+| `alert.created`               | `alert_id, src_ip, dst_ip, prediction, confidence` |
+| `alert.triaged`               | `alert_id, severity, priority`                   |
+| `alert.responded`             | `alert_id, status`                               |
+| `alert.investigated`          | `alert_id, n_related_alerts, n_related_events`   |
+| `alert.reported`              | `alert_id`                                       |
+| `alert.closed`                | `alert_id`                                       |
+| `alert.disposition_updated`   | `alert_id, disposition, status`                  |
+| `response.action_pending`     | `alert_id, count`                                |
+| `response.action_executed`    | `action_id, alert_id, action_type` (or `count`)  |
+| `response.action_rejected`    | `action_id, alert_id, action_type`               |
+| `ingestion.job_completed`     | `job_id, total_rows, valid_rows, invalid_rows`   |
+| `detection.run_completed`     | `processed, alerts_created`                       |
+| `report.created`              | `report_id, kind` (+ `alert_id` or `date`)       |
+| `stream.connected`            | `user, role`                                      |
+| `stream.heartbeat`            | _(empty)_                                         |
+
+The frontend maps each event to the TanStack Query keys it should invalidate
+(e.g. `alert.*` → `dashboard`, `alerts`, `alert`), so the relevant views refetch
+immediately. When the stream is connected, polling intervals are stretched 5× as
+a fallback; if the socket drops, normal polling resumes.
+
+> **Single-process note:** the event bus is in-process. With one backend worker
+> this is complete; horizontal scaling would need a shared broker (e.g. Redis
+> pub/sub) to fan events across replicas.

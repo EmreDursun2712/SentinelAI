@@ -5,6 +5,7 @@ import { ConnectionPill } from "@/components/ConnectionPill";
 import { Button } from "@/components/ui/Button";
 import { healthApi } from "@/lib/api";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { useStreamStatus } from "@/lib/stream/StreamProvider";
 
 const TITLES: Record<string, string> = {
   "/": "Dashboard",
@@ -24,6 +25,7 @@ export function Topbar() {
   const path = pathname;
   const title = activeTitle(path);
   const { user, logout } = useAuth();
+  const { connected: live } = useStreamStatus();
   const navigate = useNavigate();
 
   async function handleLogout() {
@@ -61,6 +63,11 @@ export function Topbar() {
           ok={!readyQ.isError && readyQ.data?.db === "ok"}
           label="Database"
           value={readyQ.data?.db ?? (readyQ.isError ? "down" : "…")}
+        />
+        <ConnectionPill
+          ok={live}
+          label="Live"
+          value={live ? "on" : "off"}
         />
 
         {user && (

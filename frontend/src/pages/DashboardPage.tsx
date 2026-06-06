@@ -16,6 +16,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Spinner } from "@/components/ui/Spinner";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@/components/ui/Table";
 import { alertsApi, dashboardApi, detectionApi } from "@/lib/api";
+import { useLiveInterval } from "@/lib/stream/StreamProvider";
 import { formatRelative } from "@/lib/format";
 
 const TIMESERIES_HOURS = 24;
@@ -24,17 +25,17 @@ export default function DashboardPage() {
   const overviewQ = useQuery({
     queryKey: ["dashboard", "overview"],
     queryFn: dashboardApi.getOverview,
-    refetchInterval: 15_000,
+    refetchInterval: useLiveInterval(15_000),
   });
   const timeseriesQ = useQuery({
     queryKey: ["alerts", "timeseries", TIMESERIES_HOURS],
     queryFn: () => alertsApi.getAlertTimeseries(TIMESERIES_HOURS),
-    refetchInterval: 30_000,
+    refetchInterval: useLiveInterval(30_000),
   });
   const recentQ = useQuery({
     queryKey: ["alerts", "recent"],
     queryFn: () => alertsApi.listAlerts({ sort: "priority", limit: 10 }),
-    refetchInterval: 30_000,
+    refetchInterval: useLiveInterval(30_000),
   });
   const modelQ = useQuery({
     queryKey: ["detection", "model"],

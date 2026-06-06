@@ -18,6 +18,7 @@ from typing import BinaryIO
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.events import EventType, publish_event
 from app.core.logging import get_logger
 from app.ingestion.csv_loader import stream_csv
 from app.ingestion.parser import ParsedFlow
@@ -99,6 +100,16 @@ async def ingest_csv(
         )
         await session.commit()
         log.info("ingestion.completed", total=total, valid=valid, invalid=invalid)
+
+        await publish_event(
+            EventType.INGESTION_JOB_COMPLETED,
+            {
+                "job_id": job_id,
+                "total_rows": total,
+                "valid_rows": valid,
+                "invalid_rows": invalid,
+            },
+        )
 
         return IngestionSummary(
             job_id=job_id,

@@ -6,6 +6,7 @@ import { BrowserRouter } from "react-router-dom";
 import App from "@/App";
 import { shouldRetry } from "@/lib/api/errors";
 import { AuthProvider } from "@/lib/auth/AuthContext";
+import { StreamProvider } from "@/lib/stream/StreamProvider";
 import "@/styles/globals.css";
 
 const queryClient = new QueryClient({
@@ -30,7 +31,9 @@ createRoot(rootElement).render(
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
-          <App />
+          <StreamProvider>
+            <App />
+          </StreamProvider>
         </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>

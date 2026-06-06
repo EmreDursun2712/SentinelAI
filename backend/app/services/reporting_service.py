@@ -19,7 +19,8 @@ through the API).
 from __future__ import annotations
 
 from collections import Counter
-from datetime import UTC, date as date_t, datetime, time, timedelta
+from datetime import UTC, datetime, time, timedelta
+from datetime import date as date_t
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,7 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.events import EventType, publish_event
 from app.core.logging import get_logger
 from app.models import (
     AgentDecision,
@@ -176,6 +178,12 @@ async def generate_alert_report(
         md_path=str(md_path) if md_path else None,
         actions=len(actions),
     )
+    if commit:
+        await publish_event(
+            EventType.REPORT_CREATED,
+            {"report_id": report.id, "alert_id": alert.id, "kind": "PER_ALERT"},
+        )
+        await publish_event(EventType.ALERT_REPORTED, {"alert_id": alert.id})
     return report, packet
 
 
@@ -310,6 +318,15 @@ async def generate_daily_summary(
         date=target_date.isoformat(),
         total_alerts=total_alerts,
     )
+    if commit:
+        await publish_event(
+            EventType.REPORT_CREATED,
+            {
+                "report_id": report.id,
+                "kind": "DAILY_SUMMARY",
+                "date": target_date.isoformat(),
+            },
+        )
     return report, packet
 
 

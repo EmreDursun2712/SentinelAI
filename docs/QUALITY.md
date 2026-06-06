@@ -149,9 +149,11 @@ demo day. Each item is tagged with severity for a course-project context.
 
 ### Low — cosmetic or process-only
 
-- **WebSocket `/stream`** accepts connections but only echoes messages.
-  The frontend's `useStream` hook is exported but unused. Either remove or
-  document as a stub.
+- **WebSocket `/stream`** broadcasts real domain events (alert/response/report/
+  ingestion/detection lifecycle) to authenticated clients; the frontend
+  `StreamProvider` invalidates the matching TanStack Query keys so the UI
+  updates without waiting for polling. Auth is via a `?token=` JWT; events fire
+  only after the DB commit succeeds. See [API.md](API.md#event-stream-websocket).
 - **Hardcoded `ui-analyst` analyst id** in three frontend places. Find and
   replace when auth lands.
 - **Frontend doesn't show a global toast on mutation success/failure.**

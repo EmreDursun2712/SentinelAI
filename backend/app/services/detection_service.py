@@ -18,6 +18,7 @@ import pandas as pd
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.events import EventType, publish_event
 from app.core.logging import get_logger
 from app.models import (
     AgentDecision,
@@ -241,6 +242,9 @@ async def detect_events(
     labels, confs, probs = await asyncio.to_thread(_run_inference, bundle, X)
     now = datetime.now(UTC)
 
+    # Collected during the txn, broadcast only after a successful commit below.
+    broadcast: list[tuple[str, dict[str, Any]]] = []
+
     predictions: list[Prediction] = []
     for event, label, conf, probabilities in zip(events, labels, confs, probs, strict=True):
         benign = label == benign_label
@@ -279,12 +283,41 @@ async def detect_events(
             )
             session.add(decision)
 
+            broadcast.append(
+                (
+                    EventType.ALERT_CREATED,
+                    {
+                        "alert_id": alert_id,
+                        "src_ip": str(alert.src_ip),
+                        "dst_ip": str(alert.dst_ip),
+                        "prediction": label,
+                        "confidence": conf,
+                    },
+                )
+            )
+
             if auto_triage:
                 # Same transaction — keeps NEW → TRIAGED atomic per alert.
                 await triage_alert(session, alert, commit=False)
+                broadcast.append(
+                    (
+                        EventType.ALERT_TRIAGED,
+                        {
+                            "alert_id": alert_id,
+                            "severity": alert.severity.value if alert.severity else None,
+                            "priority": alert.priority,
+                        },
+                    )
+                )
                 if auto_respond:
                     # Response uses the severity set by triage.
                     await recommend_for_alert(session, alert, commit=False)
+                    broadcast.append(
+                        (
+                            EventType.ALERT_RESPONDED,
+                            {"alert_id": alert_id, "status": alert.status.value},
+                        )
+                    )
 
         predictions.append(
             Prediction(
@@ -300,13 +333,22 @@ async def detect_events(
         )
 
     await session.commit()
+    n_alerts = sum(1 for p in predictions if p.alert_created)
     logger.info(
         "detection.completed",
         n_events=len(events),
-        n_alerts=sum(1 for p in predictions if p.alert_created),
+        n_alerts=n_alerts,
         model_version_id=model_version_id,
         auto_triage=auto_triage,
         auto_respond=auto_respond and auto_triage,
+    )
+
+    # Broadcast only after the commit succeeded — rolled-back work never emits.
+    for event_type, payload in broadcast:
+        await publish_event(event_type, payload)
+    await publish_event(
+        EventType.DETECTION_RUN_COMPLETED,
+        {"processed": len(predictions), "alerts_created": n_alerts},
     )
     return predictions
 

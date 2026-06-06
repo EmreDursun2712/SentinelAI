@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -33,6 +35,7 @@ from app.core.ratelimit import (
     get_rate_limiter,
     set_rate_limiter,
 )
+from app.core.ws_manager import get_connection_manager
 from app.services.model_registry import get_model_registry
 from app.services.user_service import ensure_bootstrap_admin
 
@@ -92,13 +95,30 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         except Exception:
             logger.exception("auth.bootstrap_admin_failed")
 
+    # Periodic keepalive so idle WebSocket connections survive proxies and the
+    # client can detect a dead link.
+    heartbeat = asyncio.create_task(_heartbeat_loop())
+
     logger.info("backend.startup", env=settings.env, version=__version__)
     try:
         yield
     finally:
+        heartbeat.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await heartbeat
         await get_rate_limiter().aclose()
         await dispose_engine()
         logger.info("backend.shutdown")
+
+
+HEARTBEAT_SECONDS = 25
+
+
+async def _heartbeat_loop() -> None:
+    manager = get_connection_manager()
+    while True:
+        await asyncio.sleep(HEARTBEAT_SECONDS)
+        await manager.broadcast({"type": "stream.heartbeat", "payload": {}})
 
 
 async def _configure_rate_limiter(settings) -> None:

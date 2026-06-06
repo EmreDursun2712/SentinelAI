@@ -15,6 +15,7 @@ import { Table, Tbody, Td, Th, Thead, Tr } from "@/components/ui/Table";
 import { dashboardApi, responseApi } from "@/lib/api";
 import { errorMessage } from "@/lib/api/errors";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { useLiveInterval } from "@/lib/stream/StreamProvider";
 import { formatRelative } from "@/lib/format";
 import type { ResponseActionOut, ResponseActionType, ResponseStatus } from "@/lib/types";
 
@@ -51,7 +52,7 @@ export default function ResponseCenterPage() {
   const overviewQ = useQuery({
     queryKey: ["dashboard", "overview"],
     queryFn: dashboardApi.getOverview,
-    refetchInterval: 30_000,
+    refetchInterval: useLiveInterval(30_000),
   });
 
   const pendingQ = useQuery({
@@ -62,7 +63,7 @@ export default function ResponseCenterPage() {
         action_type: actionFilter || undefined,
         limit: 100,
       }),
-    refetchInterval: 10_000,
+    refetchInterval: useLiveInterval(10_000),
   });
 
   const recentQ = useQuery({
@@ -72,7 +73,7 @@ export default function ResponseCenterPage() {
         action_type: actionFilter || undefined,
         limit: 50,
       }),
-    refetchInterval: 30_000,
+    refetchInterval: useLiveInterval(30_000),
   });
 
   const approve = useMutation({

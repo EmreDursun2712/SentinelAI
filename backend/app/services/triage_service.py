@@ -16,6 +16,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.events import EventType, publish_event
 from app.core.logging import get_logger
 from app.models import AgentDecision, Alert
 from app.models.enums import (
@@ -118,6 +119,13 @@ async def triage_alert(
         priority=score.priority,
         recent_count=recent_count,
     )
+    # Only the committing (endpoint) path broadcasts; when commit=False the
+    # Detection orchestrator owns the broadcast after its own commit.
+    if commit:
+        await publish_event(
+            EventType.ALERT_TRIAGED,
+            {"alert_id": alert.id, "severity": score.severity, "priority": score.priority},
+        )
     return score
 
 
@@ -152,6 +160,7 @@ async def close_alert(
     await session.refresh(alert)
 
     logger.info("alert.closed", alert_id=alert.id, analyst_id=analyst_id)
+    await publish_event(EventType.ALERT_CLOSED, {"alert_id": alert.id})
     return alert
 
 
@@ -199,4 +208,14 @@ async def update_disposition(
         to=new_disposition.value,
         analyst_id=analyst_id,
     )
+    await publish_event(
+        EventType.ALERT_DISPOSITION_UPDATED,
+        {
+            "alert_id": alert.id,
+            "disposition": new_disposition.value,
+            "status": alert.status.value,
+        },
+    )
+    if new_disposition in terminal:
+        await publish_event(EventType.ALERT_CLOSED, {"alert_id": alert.id})
     return alert
