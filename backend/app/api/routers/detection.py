@@ -1,0 +1,217 @@
+"""Detection API.
+
+Surface:
+
+    GET  /api/v1/detection/model            — current bundle info
+    POST /api/v1/detection/predict          — inference on raw FlowRecordIn (no DB)
+    POST /api/v1/detection/events/{id}      — detect a stored event; persists
+    POST /api/v1/detection/batch            — detect a list of event_ids; persists
+    POST /api/v1/detection/run              — process recent un-detected events
+"""
+
+from __future__ import annotations
+
+from collections import Counter
+
+from fastapi import APIRouter, status
+from sqlalchemy import select
+
+from app.api.deps import SessionDep
+from app.core.config import get_settings
+from app.core.errors import AppError, NotFoundError
+from app.models import ModelVersion, NetworkEvent
+from app.schemas.detection import (
+    BatchEventRequest,
+    ModelInfoOut,
+    PredictRequest,
+    PredictionOut,
+    RunRequest,
+    RunSummary,
+)
+from app.services.detection_service import (
+    Prediction,
+    detect_events,
+    fetch_undetected_events,
+    predict_flows,
+)
+from app.services.model_registry import ModelBundle, get_model_registry
+
+router = APIRouter(prefix="/detection")
+
+
+def _require_bundle() -> ModelBundle:
+    """Return the loaded bundle, attempting one lazy reload before giving up."""
+    registry = get_model_registry()
+    bundle = registry.get()
+    if bundle is None:
+        bundle = registry.load_from_disk(get_settings().ml_artifacts_dir)
+    if bundle is None:
+        raise AppError(
+            "Detection model is not loaded. Train and stage artifacts under "
+            "ml/artifacts/latest/ first.",
+            details={"artifacts_dir": get_settings().ml_artifacts_dir},
+        )
+    return bundle
+
+
+def _to_out(p: Prediction) -> PredictionOut:
+    return PredictionOut(
+        event_id=p.event_id,
+        predicted_label=p.predicted_label,
+        confidence=p.confidence,
+        class_probabilities=p.class_probabilities,
+        threshold=p.threshold,
+        benign=p.benign,
+        alert_created=p.alert_created,
+        alert_id=p.alert_id,
+    )
+
+
+@router.get("/model")
+async def model_info(session: SessionDep) -> ModelInfoOut:
+    settings = get_settings()
+    bundle = get_model_registry().get()
+    if bundle is None:
+        return ModelInfoOut(
+            loaded=False,
+            threshold=settings.detection_threshold,
+            benign_label=settings.detection_benign_label,
+        )
+
+    db_id = bundle.db_id
+    is_active: bool | None = None
+    if db_id is not None:
+        is_active = (
+            await session.execute(
+                select(ModelVersion.is_active).where(ModelVersion.id == db_id)
+            )
+        ).scalar_one_or_none()
+    else:
+        row = (
+            await session.execute(
+                select(ModelVersion).where(
+                    ModelVersion.name == bundle.name,
+                    ModelVersion.version == bundle.version,
+                )
+            )
+        ).scalar_one_or_none()
+        if row is not None:
+            db_id = row.id
+            is_active = row.is_active
+            bundle.db_id = row.id
+
+    return ModelInfoOut(
+        loaded=True,
+        name=bundle.name,
+        version=bundle.version,
+        algorithm=bundle.algorithm,
+        classes=bundle.classes,
+        feature_order=bundle.feature_order,
+        metrics_summary=bundle.metadata.get("metrics_summary", {}) or {},
+        artifact_dir=str(bundle.artifact_dir),
+        loaded_at=bundle.loaded_at,
+        db_id=db_id,
+        is_active=is_active,
+        threshold=settings.detection_threshold,
+        benign_label=settings.detection_benign_label,
+    )
+
+
+@router.post("/predict", status_code=status.HTTP_200_OK)
+async def predict(request: PredictRequest) -> list[PredictionOut]:
+    bundle = _require_bundle()
+    settings = get_settings()
+    predictions = predict_flows(
+        bundle,
+        request.flows,
+        threshold=settings.detection_threshold,
+        benign_label=settings.detection_benign_label,
+    )
+    return [_to_out(p) for p in predictions]
+
+
+@router.post("/events/{event_id}", status_code=status.HTTP_200_OK)
+async def detect_one(session: SessionDep, event_id: int) -> PredictionOut:
+    bundle = _require_bundle()
+    settings = get_settings()
+
+    event = await session.get(NetworkEvent, event_id)
+    if event is None:
+        raise NotFoundError(f"NetworkEvent {event_id} not found.")
+
+    predictions = await detect_events(
+        session,
+        bundle,
+        [event],
+        threshold=settings.detection_threshold,
+        benign_label=settings.detection_benign_label,
+    )
+    return _to_out(predictions[0])
+
+
+@router.post("/batch", status_code=status.HTTP_200_OK)
+async def detect_many(
+    session: SessionDep, request: BatchEventRequest
+) -> list[PredictionOut]:
+    bundle = _require_bundle()
+    settings = get_settings()
+
+    result = await session.execute(
+        select(NetworkEvent).where(NetworkEvent.id.in_(request.event_ids))
+    )
+    events = list(result.scalars().all())
+
+    found_ids = {ev.id for ev in events}
+    missing = [i for i in request.event_ids if i not in found_ids]
+    if missing:
+        raise NotFoundError(
+            f"{len(missing)} NetworkEvent id(s) not found.",
+            details={"missing": missing[:50]},
+        )
+
+    by_id = {ev.id: ev for ev in events}
+    ordered = [by_id[i] for i in request.event_ids]
+
+    predictions = await detect_events(
+        session,
+        bundle,
+        ordered,
+        threshold=settings.detection_threshold,
+        benign_label=settings.detection_benign_label,
+    )
+    return [_to_out(p) for p in predictions]
+
+
+@router.post("/run", status_code=status.HTTP_200_OK)
+async def run_recent(session: SessionDep, request: RunRequest) -> RunSummary:
+    bundle = _require_bundle()
+    settings = get_settings()
+
+    events = await fetch_undetected_events(session, request.limit)
+    if not events:
+        return RunSummary(
+            processed=0,
+            alerts_created=0,
+            benign_count=0,
+            by_label={},
+            model_name=bundle.name,
+            model_version=bundle.version,
+        )
+
+    predictions = await detect_events(
+        session,
+        bundle,
+        events,
+        threshold=settings.detection_threshold,
+        benign_label=settings.detection_benign_label,
+    )
+
+    by_label = Counter(p.predicted_label for p in predictions)
+    return RunSummary(
+        processed=len(predictions),
+        alerts_created=sum(1 for p in predictions if p.alert_created),
+        benign_count=sum(1 for p in predictions if p.benign),
+        by_label=dict(by_label),
+        model_name=bundle.name,
+        model_version=bundle.version,
+    )

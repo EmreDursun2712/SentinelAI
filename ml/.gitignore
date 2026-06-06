@@ -1,0 +1,5 @@
+data/
+artifacts/*.joblib
+artifacts/*.pkl
+artifacts/metadata.json
+.ipynb_checkpoints/

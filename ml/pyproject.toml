@@ -1,0 +1,38 @@
+[project]
+name = "sentinelai-ml"
+version = "0.1.0"
+description = "SentinelAI ML pipeline — offline CIC-IDS2017 training and evaluation."
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [{ name = "SentinelAI Team" }]
+license = { text = "MIT" }
+
+dependencies = [
+    "numpy>=2.1",
+    "pandas>=2.2",
+    "scikit-learn>=1.5",
+    "joblib>=1.4",
+    "pyarrow>=17.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.7",
+]
+
+[project.scripts]
+sentinelai-train = "ml.train:main"
+sentinelai-evaluate = "ml.evaluate:main"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["ml"]
+package-dir = { "ml" = "." }
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"

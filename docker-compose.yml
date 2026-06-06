@@ -1,0 +1,80 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sentinelai-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sentinelai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sentinelai}
+      POSTGRES_DB: ${POSTGRES_DB:-sentinelai}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sentinelai} -d ${POSTGRES_DB:-sentinelai}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sentinelai-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SENTINEL_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-sentinelai}:${POSTGRES_PASSWORD:-sentinelai}@postgres:5432/${POSTGRES_DB:-sentinelai}
+      SENTINEL_API_KEY: ${BACKEND_API_KEY:-dev-api-key-change-me}
+      SENTINEL_JWT_SECRET: ${BACKEND_JWT_SECRET:-dev-jwt-secret-change-me}
+      SENTINEL_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-http://localhost:5173}
+      SENTINEL_LOG_LEVEL: ${BACKEND_LOG_LEVEL:-info}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - ./backend:/app
+      - ./ml/artifacts:/app/ml_artifacts:ro
+    # Entrypoint (alembic upgrade head → exec uvicorn) is baked into the image.
+    # `command:` here is the *extra args* forwarded to uvicorn — only --reload
+    # in dev so HMR works with the bind-mounted source above.
+    command: ["--reload"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: sentinelai-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000/api/v1}
+      VITE_WS_BASE_URL: ${VITE_WS_BASE_URL:-ws://localhost:8000/api/v1}
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    command: npm run dev -- --host 0.0.0.0
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:5173/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  postgres_data:
+  frontend_node_modules:
