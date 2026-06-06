@@ -37,6 +37,18 @@ class Settings(BaseSettings):
 
     ml_artifacts_dir: str = "/app/ml_artifacts"
 
+    # Rate limiting. Redis-backed in production; falls back to an in-process
+    # limiter only in development if Redis is unreachable (see lifespan).
+    redis_url: str | None = None
+    rate_limit_enabled: bool = True
+    # Compact "<count>/<unit>" specs; unit ∈ second|minute|hour. Env-overridable.
+    rate_limit_login: str = "5/minute"          # per IP+username
+    rate_limit_authenticated: str = "120/minute"  # general per-user fallback
+    rate_limit_ingest: str = "10/minute"        # per user
+    rate_limit_detection: str = "5/minute"      # per user
+    rate_limit_report: str = "20/minute"        # per user
+    rate_limit_response: str = "60/minute"      # per user
+
     # Ingestion
     ingest_data_dir: str = "data"
     ingest_max_upload_bytes: int = 20 * 1024 * 1024  # 20 MiB

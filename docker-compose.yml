@@ -19,6 +19,20 @@ services:
       retries: 10
       start_period: 5s
 
+  redis:
+    image: redis:7-alpine
+    container_name: sentinelai-redis
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 3s
+
   backend:
     build:
       context: ./backend
@@ -28,8 +42,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       SENTINEL_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-sentinelai}:${POSTGRES_PASSWORD:-sentinelai}@postgres:5432/${POSTGRES_DB:-sentinelai}
+      SENTINEL_REDIS_URL: ${BACKEND_REDIS_URL:-redis://redis:6379/0}
+      SENTINEL_RATE_LIMIT_ENABLED: ${BACKEND_RATE_LIMIT_ENABLED:-true}
       SENTINEL_API_KEY: ${BACKEND_API_KEY:-dev-api-key-change-me}
       SENTINEL_JWT_SECRET: ${BACKEND_JWT_SECRET:-dev-jwt-secret-change-me}
       SENTINEL_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-http://localhost:5173}

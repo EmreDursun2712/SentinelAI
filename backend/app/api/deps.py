@@ -18,9 +18,13 @@ from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
-from app.core.errors import ForbiddenError, UnauthorizedError
+from app.core.errors import ForbiddenError, RateLimitedError, UnauthorizedError
+from app.core.logging import get_logger
+from app.core.ratelimit import get_policy, get_rate_limiter
 from app.core.security import decode_access_token, verify_api_key
 from app.models.enums import Role, role_satisfies
+
+logger = get_logger(__name__)
 
 
 async def db_session() -> AsyncIterator[AsyncSession]:
@@ -148,3 +152,68 @@ async def require_api_key(x_api_key: Annotated[str | None, Header()] = None) -> 
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing API key.",
         )
+
+
+# ---------------------------------------------------------------------------
+# Rate limiting.
+# ---------------------------------------------------------------------------
+
+
+async def get_optional_user(
+    authorization: Annotated[str | None, Header()] = None,
+) -> AuthPrincipal | None:
+    """Like ``get_current_user`` but returns None instead of raising 401.
+
+    Lets the rate-limit dependency key authenticated callers by user and fall
+    back to the client IP for unauthenticated ones (e.g. the login endpoint).
+    """
+    try:
+        return await get_current_user(authorization)
+    except UnauthorizedError:
+        return None
+
+
+OptionalUser = Annotated["AuthPrincipal | None", Depends(get_optional_user)]
+
+
+def client_ip(request: Request) -> str:
+    """Best-effort client IP. Honors the first X-Forwarded-For hop behind a proxy."""
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def rate_limit_identity(principal: AuthPrincipal | None, ip: str) -> str:
+    """Bucket identity: the user when authenticated, else the client IP."""
+    return f"user:{principal.username}" if principal is not None else f"ip:{ip}"
+
+
+async def enforce_rate_limit(request: Request, policy_name: str, identity: str) -> None:
+    """Consume one token from ``policy_name`` for ``identity``; raise 429 if empty."""
+    policy = get_policy(policy_name)
+    key = f"rl:{policy_name}:{identity}"
+    result = await get_rate_limiter().hit(key, policy)
+    if not result.allowed:
+        logger.warning(
+            "ratelimit.exceeded",
+            policy=policy_name,
+            identity=identity,
+            request_id=getattr(request.state, "request_id", None),
+            retry_after=result.retry_after,
+        )
+        raise RateLimitedError(retry_after=result.retry_after)
+
+
+def rate_limit(policy_name: str):
+    """Dependency factory enforcing ``policy_name`` keyed by user (or IP).
+
+    Use for authenticated endpoints. The login endpoint applies its own
+    IP+username limit in-handler, where the username is available.
+    """
+
+    async def _dep(request: Request, principal: OptionalUser) -> None:
+        identity = rate_limit_identity(principal, client_ip(request))
+        await enforce_rate_limit(request, policy_name, identity)
+
+    return _dep

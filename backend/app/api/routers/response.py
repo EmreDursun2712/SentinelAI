@@ -14,9 +14,9 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import SessionDep
+from app.api.deps import SessionDep, rate_limit
 from app.core.errors import NotFoundError
 from app.models import Alert, ResponseAction
 from app.models.enums import ResponseActionType, ResponseStatus
@@ -28,8 +28,14 @@ from app.schemas.response import (
 )
 from app.services.response_service import (
     approve_action as svc_approve,
+)
+from app.services.response_service import (
     list_actions as svc_list,
+)
+from app.services.response_service import (
     recommend_for_alert,
+)
+from app.services.response_service import (
     reject_action as svc_reject,
 )
 
@@ -72,7 +78,11 @@ async def list_response_actions(
     return [_to_out(a) for a in actions]
 
 
-@router.post("/recommend/{alert_id}", status_code=status.HTTP_200_OK)
+@router.post(
+    "/recommend/{alert_id}",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(rate_limit("response"))],
+)
 async def recommend_for_alert_endpoint(
     session: SessionDep, alert_id: int
 ) -> RecommendResponse:
@@ -94,7 +104,11 @@ async def get_response_action(session: SessionDep, action_id: int) -> ResponseAc
     return _to_out(action)
 
 
-@router.post("/{action_id}/approve", status_code=status.HTTP_200_OK)
+@router.post(
+    "/{action_id}/approve",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(rate_limit("response"))],
+)
 async def approve_response_action(
     session: SessionDep,
     action_id: int,
@@ -110,7 +124,11 @@ async def approve_response_action(
     return _to_out(updated)
 
 
-@router.post("/{action_id}/reject", status_code=status.HTTP_200_OK)
+@router.post(
+    "/{action_id}/reject",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(rate_limit("response"))],
+)
 async def reject_response_action(
     session: SessionDep, action_id: int, request: RejectRequest
 ) -> ResponseActionOut:

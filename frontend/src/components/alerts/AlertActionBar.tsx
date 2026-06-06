@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
 import { cn } from "@/lib/cn";
 import { alertsApi, investigationApi } from "@/lib/api";
+import { errorMessage } from "@/lib/api/errors";
 import { useAuth } from "@/lib/auth/AuthContext";
 import type { AlertDetail, AlertDisposition } from "@/lib/types";
 
@@ -163,13 +164,20 @@ export function AlertActionBar({ alert }: AlertActionBarProps) {
           </div>
         </div>
 
-        {(dispositionMut.isError ||
-          triageMut.isError ||
-          investigateMut.isError ||
-          reportMut.isError ||
-          closeMut.isError) && (
+        {(dispositionMut.error ||
+          triageMut.error ||
+          investigateMut.error ||
+          reportMut.error ||
+          closeMut.error) && (
           <p className="text-xs text-rose-400">
-            Last action failed — see browser console / network tab for details.
+            {errorMessage(
+              dispositionMut.error ??
+                triageMut.error ??
+                investigateMut.error ??
+                reportMut.error ??
+                closeMut.error,
+              "Last action failed — see the network tab for details.",
+            )}
           </p>
         )}
       </div>

@@ -9,7 +9,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
-from app.api.deps import enforce_rbac
+from app.api.deps import enforce_rbac, rate_limit
 from app.api.routers import (
     alerts,
     auth,
@@ -26,6 +26,13 @@ from app.core.db import dispose_engine, get_session, init_engine
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging, get_logger
 from app.core.middleware import RequestIdMiddleware
+from app.core.ratelimit import (
+    InMemoryRateLimiter,
+    NoopRateLimiter,
+    RedisRateLimiter,
+    get_rate_limiter,
+    set_rate_limiter,
+)
 from app.services.model_registry import get_model_registry
 from app.services.user_service import ensure_bootstrap_admin
 
@@ -47,6 +54,8 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
             "SENTINEL_JWT_SECRET is still the shipped default. Set a strong "
             "secret before running in a production-like environment."
         )
+
+    await _configure_rate_limiter(settings)
 
     # Best-effort model load. The backend stays serviceable without a model;
     # detection endpoints return a clear error and operators can stage an
@@ -87,8 +96,53 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        await get_rate_limiter().aclose()
         await dispose_engine()
         logger.info("backend.shutdown")
+
+
+async def _configure_rate_limiter(settings) -> None:
+    """Pick the rate-limit backend from settings.
+
+    Redis is required in production; if it is unreachable the app refuses to
+    boot (fail closed). In development we warn and fall back to an in-process
+    limiter so the demo still runs.
+    """
+    if not settings.rate_limit_enabled:
+        set_rate_limiter(NoopRateLimiter())
+        logger.warning("ratelimit.disabled")
+        return
+
+    if not settings.redis_url:
+        if settings.is_production:
+            raise RuntimeError(
+                "SENTINEL_REDIS_URL is required for rate limiting in production."
+            )
+        set_rate_limiter(InMemoryRateLimiter())
+        logger.warning("ratelimit.no_redis_url", backend="memory", env=settings.env)
+        return
+
+    try:
+        import redis.asyncio as aioredis
+
+        client = aioredis.from_url(settings.redis_url, decode_responses=True)
+        await client.ping()
+    except Exception as exc:
+        if settings.is_production:
+            raise RuntimeError(
+                f"Redis is required for rate limiting in production but is "
+                f"unreachable at {settings.redis_url}: {exc}"
+            ) from exc
+        set_rate_limiter(InMemoryRateLimiter())
+        logger.warning(
+            "ratelimit.redis_unavailable_dev_fallback",
+            backend="memory",
+            error=str(exc),
+        )
+        return
+
+    set_rate_limiter(RedisRateLimiter(client))
+    logger.info("ratelimit.backend", backend="redis", url=settings.redis_url)
 
 
 def create_app() -> FastAPI:
@@ -125,9 +179,12 @@ def create_app() -> FastAPI:
     # Auth is public at /login; /me, /logout, /users self-guard internally.
     app.include_router(auth.router, prefix=API_V1_PREFIX, tags=["auth"])
 
-    # Every functional API router is behind method-based RBAC:
-    #   GET/HEAD/OPTIONS → VIEWER+,  mutations → ANALYST+,  (ADMIN satisfies both).
-    protected = [Depends(enforce_rbac)]
+    # Every functional API router is behind method-based RBAC and a general
+    # per-user rate limit:
+    #   RBAC: GET/HEAD/OPTIONS → VIEWER+,  mutations → ANALYST+ (ADMIN ≥ both).
+    #   Rate: the "authenticated" policy (default 120/min per user). Expensive
+    #   endpoints add their own stricter policy on top (see each router).
+    protected = [Depends(enforce_rbac), Depends(rate_limit("authenticated"))]
     app.include_router(
         alerts.router, prefix=API_V1_PREFIX, tags=["alerts"], dependencies=protected
     )

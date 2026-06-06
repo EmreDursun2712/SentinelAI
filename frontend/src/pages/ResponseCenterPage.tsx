@@ -13,6 +13,7 @@ import { Select } from "@/components/ui/Select";
 import { Spinner } from "@/components/ui/Spinner";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@/components/ui/Table";
 import { dashboardApi, responseApi } from "@/lib/api";
+import { errorMessage } from "@/lib/api/errors";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { formatRelative } from "@/lib/format";
 import type { ResponseActionOut, ResponseActionType, ResponseStatus } from "@/lib/types";
@@ -192,6 +193,12 @@ export default function ResponseCenterPage() {
             </p>
           </div>
         </div>
+
+        {(approve.error || reject.error) && (
+          <p className="border-b border-rose-900/40 bg-rose-950/30 px-5 py-2 text-xs text-rose-300">
+            {errorMessage(approve.error ?? reject.error, "Action failed.")}
+          </p>
+        )}
 
         {pendingQ.isLoading ? (
           <div className="flex justify-center p-10 text-slate-400">

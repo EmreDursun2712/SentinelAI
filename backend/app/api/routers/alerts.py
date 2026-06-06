@@ -10,13 +10,13 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import String, cast, desc, func, or_, select
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import SessionDep
+from app.api.deps import SessionDep, rate_limit
 from app.core.errors import NotFoundError
-from app.models import AgentDecision, Alert
+from app.models import Alert
 from app.models.enums import AlertDisposition, AlertStatus, Severity
 from app.schemas.alert import (
     AlertDecisionOut,
@@ -51,6 +51,8 @@ from app.services.reporting_service import (
 )
 from app.services.triage_service import (
     close_alert as svc_close_alert,
+)
+from app.services.triage_service import (
     triage_alert,
     update_disposition,
 )
@@ -317,7 +319,11 @@ async def get_alert_investigation(
     )
 
 
-@router.post("/{alert_id}/report", status_code=status.HTTP_200_OK)
+@router.post(
+    "/{alert_id}/report",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(rate_limit("report"))],
+)
 async def generate_alert_report_endpoint(
     session: SessionDep,
     alert_id: int,

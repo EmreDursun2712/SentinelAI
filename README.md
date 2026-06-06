@@ -79,6 +79,7 @@ bash infra/scripts/smoke_demo.sh
 | `frontend` | http://localhost:5173                  | Vite dev server with HMR       |
 | `backend`  | http://localhost:8000                  | FastAPI; OpenAPI at `/docs`    |
 | `postgres` | `postgres://localhost:5432/sentinelai` | Bind-mounted volume            |
+| `redis`    | `redis://localhost:6379/0`             | Rate-limit counters            |
 
 Health probes:
 
@@ -170,6 +171,27 @@ BACKEND_BOOTSTRAP_ADMIN_PASSWORD=<a-strong-password>
 Then open <http://localhost:5173>, sign in, and operate the dashboard. Additional
 users are created by an admin via `POST /api/v1/auth/users`. Full flow and curl
 examples: [docs/API.md](docs/API.md#authentication--roles).
+
+## Rate limiting
+
+All API traffic is rate limited, backed by **Redis** (sliding window, shared
+across replicas). Limits are keyed per user when authenticated, and per
+IP+username for login. Exceeding a limit returns **HTTP 429** with a
+`Retry-After` header. Defaults (env-overridable via `SENTINEL_RATE_LIMIT_*`):
+
+| Scope                                   | Default       | Key            |
+| --------------------------------------- | ------------- | -------------- |
+| `POST /auth/login`                      | 5 / minute    | IP + username  |
+| General authenticated API               | 120 / minute  | user           |
+| Ingestion (`/ingest/*`)                 | 10 / minute   | user           |
+| Detection (`/detection/*`)              | 5 / minute    | user           |
+| Report generation                       | 20 / minute   | user           |
+| Response approve/reject/recommend       | 60 / minute   | user           |
+
+In production Redis is **required** — the backend refuses to start without it.
+In development, if Redis is unreachable it logs a warning and falls back to an
+in-process limiter so the demo still runs. Set `SENTINEL_RATE_LIMIT_ENABLED=false`
+to disable limiting entirely. Details: [docs/API.md](docs/API.md#rate-limiting).
 
 ## Environment variables
 

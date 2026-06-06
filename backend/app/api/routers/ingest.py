@@ -14,10 +14,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, File, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 from sqlalchemy import desc, select
 
-from app.api.deps import SessionDep
+from app.api.deps import SessionDep, rate_limit
 from app.core.config import get_settings
 from app.core.errors import AppError, NotFoundError
 from app.ingestion.csv_loader import CsvFormatError
@@ -36,7 +36,11 @@ from app.services.ingestion_service import ingest_csv, insert_single_flow
 router = APIRouter(prefix="/ingest")
 
 
-@router.post("/upload", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/upload",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit("ingest"))],
+)
 async def upload_csv(
     session: SessionDep,
     file: Annotated[UploadFile, File(description="CSV file with one flow per row.")],
@@ -63,7 +67,11 @@ async def upload_csv(
         raise AppError(str(exc)) from exc
 
 
-@router.post("/replay", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/replay",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit("ingest"))],
+)
 async def replay(session: SessionDep, request: ReplayRequest) -> IngestionSummary:
     """Ingest a CSV that already lives under the server-side data dir.
 
@@ -98,7 +106,11 @@ async def replay(session: SessionDep, request: ReplayRequest) -> IngestionSummar
         raise AppError(str(exc)) from exc
 
 
-@router.post("/flow", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/flow",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit("ingest"))],
+)
 async def ingest_flow(session: SessionDep, flow: FlowRecordIn) -> FlowRecordOut:
     """Ingest a single flow record. Useful for live producers and tests."""
     parsed = ParsedFlow.model_validate(flow.model_dump())

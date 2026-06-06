@@ -29,10 +29,17 @@ class AppError(Exception):
     code: str = "app_error"
     status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR
 
-    def __init__(self, message: str, details: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        details: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> None:
         super().__init__(message)
         self.message = message
         self.details = details
+        # Optional response headers (e.g. Retry-After on 429).
+        self.headers = headers
 
 
 class NotFoundError(AppError):
@@ -53,6 +60,18 @@ class UnauthorizedError(AppError):
 class ForbiddenError(AppError):
     code = "forbidden"
     status_code = status.HTTP_403_FORBIDDEN
+
+
+class RateLimitedError(AppError):
+    code = "rate_limited"
+    status_code = status.HTTP_429_TOO_MANY_REQUESTS
+
+    def __init__(self, retry_after: int) -> None:
+        super().__init__(
+            "Rate limit exceeded. Please slow down and retry shortly.",
+            details={"retry_after": retry_after},
+            headers={"Retry-After": str(max(0, int(retry_after)))},
+        )
 
 
 def _request_id(request: Request) -> str | None:
@@ -81,6 +100,7 @@ async def _handle_app_error(request: Request, exc: AppError) -> JSONResponse:
             details=exc.details,
             request_id=_request_id(request),
         ),
+        headers=getattr(exc, "headers", None),
     )
 
 

@@ -8,7 +8,19 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
+from app.core import ratelimit
 from app.main import create_app
+
+
+@pytest.fixture(autouse=True)
+def _isolate_rate_limiter() -> None:
+    """Give every test a fresh in-process limiter so counters never leak.
+
+    Without this the process-wide singleton would carry hits between tests and
+    trip unrelated assertions.
+    """
+    ratelimit.get_policies.cache_clear()
+    ratelimit.set_rate_limiter(ratelimit.InMemoryRateLimiter())
 
 
 @pytest.fixture

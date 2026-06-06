@@ -13,9 +13,15 @@ Login is the only public endpoint here; the rest require a valid token, and
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 
-from app.api.deps import CurrentUser, SessionDep, require_admin
+from app.api.deps import (
+    CurrentUser,
+    SessionDep,
+    client_ip,
+    enforce_rate_limit,
+    require_admin,
+)
 from app.core.errors import UnauthorizedError
 from app.core.logging import get_logger
 from app.core.security import create_access_token
@@ -33,7 +39,15 @@ logger = get_logger(__name__)
 
 
 @router.post("/login", status_code=status.HTTP_200_OK)
-async def login(session: SessionDep, request: LoginRequest) -> TokenResponse:
+async def login(
+    http_request: Request, session: SessionDep, request: LoginRequest
+) -> TokenResponse:
+    # Brute-force guard: limit by IP + username together, before touching the DB.
+    # This throttles both password-spraying one account and many-account attempts
+    # from a single source.
+    identity = f"{client_ip(http_request)}:{request.username.strip().lower()}"
+    await enforce_rate_limit(http_request, "login", identity)
+
     user = await user_service.authenticate(
         session, username=request.username, password=request.password
     )

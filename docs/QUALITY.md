@@ -123,8 +123,11 @@ demo day. Each item is tagged with severity for a course-project context.
 
 ### Medium — surfaces under load or odd inputs
 
-- **No rate limiting on any endpoint.** A noisy classroom network could
-  cause request spam. The 20 MiB upload cap is the only hard limit.
+- **Rate limiting** is now Redis-backed (sliding window) on every endpoint —
+  login (5/min per IP+username), a 120/min per-user fallback, and tighter
+  buckets on ingest/detection/report/response. Returns 429 + `Retry-After`.
+  In dev it falls back to an in-process limiter if Redis is down; in prod Redis
+  is required. See [API.md](API.md#rate-limiting).
 - **CSV parser is permissive.** It accepts wide column-name variants and
   drops sentinels (`NaN`, `Infinity`). Good for real-world CSVs, but it
   means subtly wrong files ingest with high "valid_rows" counts. The errors

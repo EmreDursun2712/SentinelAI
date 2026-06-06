@@ -12,9 +12,9 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 
-from app.api.deps import SessionDep
+from app.api.deps import SessionDep, rate_limit
 from app.core.errors import NotFoundError
 from app.models.enums import IncidentKind
 from app.schemas.reporting import (
@@ -45,7 +45,11 @@ async def list_reports_endpoint(
     return [IncidentReportOut.model_validate(r) for r in rows]
 
 
-@router.post("/daily/run", status_code=status.HTTP_200_OK)
+@router.post(
+    "/daily/run",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(rate_limit("report"))],
+)
 async def daily_run(
     session: SessionDep, request: DailySummaryRequest | None = None
 ) -> DailySummaryEnvelope:

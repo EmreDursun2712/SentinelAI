@@ -11,6 +11,8 @@ The machine-readable schema is at `/api/v1/openapi.json`.
 - **Every `/api/v1` endpoint requires a JWT** (`Authorization: Bearer <token>`), except
   `POST /api/v1/auth/login`. `/health`, `/readyz`, `/docs`, `/redoc`, and
   `/api/v1/openapi.json` stay public. See [Authentication & roles](#authentication--roles).
+- **All endpoints are rate limited.** Exceeding a limit returns `429` with a
+  `Retry-After` header. See [Rate limiting](#rate-limiting).
 
 ## Authentication & roles
 
@@ -56,6 +58,51 @@ are created via `POST /api/v1/auth/users` (ADMIN only).
 > placeholders for the classroom demo. Rotate them (and the bootstrap admin password) before
 > any shared/exposed deployment — the backend refuses to start in a production-like
 > `SENTINEL_ENV` while `JWT_SECRET` is still the default.
+
+## Rate limiting
+
+Every endpoint is rate limited with a Redis-backed sliding window (shared across
+backend replicas). Buckets are keyed by **user** when authenticated and by
+**IP+username** for login. When a caller exceeds a limit the response is:
+
+```http
+HTTP/1.1 429 Too Many Requests
+Retry-After: 23
+Content-Type: application/json
+
+{ "error": { "code": "rate_limited", "message": "Rate limit exceeded...",
+             "details": { "retry_after": 23 } }, "request_id": "..." }
+```
+
+Clients should honor `Retry-After` and must not retry on 429 (the frontend's
+query client and the API client both stop retrying on 4xx). Each hit is logged
+server-side with the request id and the user/IP.
+
+### Default policies
+
+| Policy          | Endpoints                                                        | Default       | Key           |
+| --------------- | --------------------------------------------------------------- | ------------- | ------------- |
+| `login`         | `POST /auth/login`                                              | 5 / minute    | IP + username |
+| `authenticated` | all `/api/v1` functional routers (general fallback)            | 120 / minute  | user          |
+| `ingest`        | `/ingest/upload`, `/ingest/replay`, `/ingest/flow`             | 10 / minute   | user          |
+| `detection`     | `/detection/run`, `/detection/batch`, `/detection/events/{id}`, `/detection/predict` | 5 / minute | user |
+| `report`        | `/alerts/{id}/report`, `/reports/daily/run`                    | 20 / minute   | user          |
+| `response`      | `/response/recommend/{id}`, `/response/{id}/approve`, `/response/{id}/reject` | 60 / minute | user |
+
+Expensive endpoints consume both their specific bucket and the general
+`authenticated` bucket. Override any policy with the matching env var, e.g.
+`SENTINEL_RATE_LIMIT_DETECTION=10/minute`.
+
+### Backend & failure modes
+
+* Redis URL: `SENTINEL_REDIS_URL` (e.g. `redis://redis:6379/0`).
+* Toggle: `SENTINEL_RATE_LIMIT_ENABLED` (default `true`).
+* **Production** (`SENTINEL_ENV` ∈ production/staging): Redis is required — the
+  backend refuses to start if it is unset or unreachable (fail closed).
+* **Development**: if Redis is unreachable the backend logs a warning and falls
+  back to an in-process limiter (per-process only) so the demo still runs.
+* A Redis error *during* a request fails **open** (the request is allowed and a
+  warning is logged) so a transient blip can't take the whole API down.
 
 ## Error envelope
 

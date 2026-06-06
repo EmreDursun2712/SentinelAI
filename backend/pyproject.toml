@@ -29,6 +29,7 @@ dependencies = [
     "pandas>=2.2",
     "scikit-learn>=1.5",
     "joblib>=1.4",
+    "redis>=5.0",
 ]
 
 [project.optional-dependencies]

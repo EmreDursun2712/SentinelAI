@@ -13,18 +13,18 @@ from __future__ import annotations
 
 from collections import Counter
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy import select
 
-from app.api.deps import SessionDep
+from app.api.deps import SessionDep, rate_limit
 from app.core.config import get_settings
 from app.core.errors import AppError, NotFoundError
 from app.models import ModelVersion, NetworkEvent
 from app.schemas.detection import (
     BatchEventRequest,
     ModelInfoOut,
-    PredictRequest,
     PredictionOut,
+    PredictRequest,
     RunRequest,
     RunSummary,
 )
@@ -117,7 +117,11 @@ async def model_info(session: SessionDep) -> ModelInfoOut:
     )
 
 
-@router.post("/predict", status_code=status.HTTP_200_OK)
+@router.post(
+    "/predict",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(rate_limit("detection"))],
+)
 async def predict(request: PredictRequest) -> list[PredictionOut]:
     bundle = _require_bundle()
     settings = get_settings()
@@ -130,7 +134,11 @@ async def predict(request: PredictRequest) -> list[PredictionOut]:
     return [_to_out(p) for p in predictions]
 
 
-@router.post("/events/{event_id}", status_code=status.HTTP_200_OK)
+@router.post(
+    "/events/{event_id}",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(rate_limit("detection"))],
+)
 async def detect_one(session: SessionDep, event_id: int) -> PredictionOut:
     bundle = _require_bundle()
     settings = get_settings()
@@ -149,7 +157,11 @@ async def detect_one(session: SessionDep, event_id: int) -> PredictionOut:
     return _to_out(predictions[0])
 
 
-@router.post("/batch", status_code=status.HTTP_200_OK)
+@router.post(
+    "/batch",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(rate_limit("detection"))],
+)
 async def detect_many(
     session: SessionDep, request: BatchEventRequest
 ) -> list[PredictionOut]:
@@ -182,7 +194,11 @@ async def detect_many(
     return [_to_out(p) for p in predictions]
 
 
-@router.post("/run", status_code=status.HTTP_200_OK)
+@router.post(
+    "/run",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(rate_limit("detection"))],
+)
 async def run_recent(session: SessionDep, request: RunRequest) -> RunSummary:
     bundle = _require_bundle()
     settings = get_settings()
