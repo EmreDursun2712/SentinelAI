@@ -26,6 +26,7 @@ from sklearn.preprocessing import LabelEncoder
 
 from ml import __version__
 from ml.artifacts import make_version, save_artifacts, update_latest
+from ml.baseline import compute_baseline
 from ml.data_loader import load_path
 from ml.metrics import compute_metrics, confusion_matrix_json
 from ml.pipeline import Algorithm, build_pipeline
@@ -225,6 +226,12 @@ def main(argv: list[str] | None = None) -> int:
             "validation_accuracy": val_metrics["accuracy"],
             "test_accuracy": test_metrics["accuracy"],
         },
+        # Drift-monitoring baseline: per-feature quantile bins + means/stds and
+        # the training class distribution. The backend compares recent traffic
+        # against this; artifacts without it report drift "unavailable".
+        "baseline": compute_baseline(
+            X_train, encoder.inverse_transform(y_train).tolist(), classes
+        ),
     }
     metrics_payload = {"validation": val_metrics, "test": test_metrics}
 

@@ -7,13 +7,17 @@ Surface:
     POST /api/v1/detection/events/{id}      — detect a stored event; persists
     POST /api/v1/detection/batch            — detect a list of event_ids; persists
     POST /api/v1/detection/run              — process recent un-detected events
+    GET  /api/v1/detection/drift/latest     — most recent drift snapshot
+    GET  /api/v1/detection/drift/history    — recent drift snapshots
+    POST /api/v1/detection/drift/run        — compute + persist a drift snapshot
 """
 
 from __future__ import annotations
 
 from collections import Counter
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import select
 
 from app.api.deps import SessionDep, rate_limit
@@ -22,12 +26,17 @@ from app.core.errors import AppError, NotFoundError
 from app.models import ModelVersion, NetworkEvent
 from app.schemas.detection import (
     BatchEventRequest,
+    DriftHistoryOut,
+    DriftReport,
+    DriftRunRequest,
+    DriftSnapshotOut,
     ModelInfoOut,
     PredictionOut,
     PredictRequest,
     RunRequest,
     RunSummary,
 )
+from app.services import drift_service
 from app.services.detection_service import (
     Prediction,
     detect_events,
@@ -37,6 +46,21 @@ from app.services.detection_service import (
 from app.services.model_registry import ModelBundle, get_model_registry
 
 router = APIRouter(prefix="/detection")
+
+
+def _drift_report(result: drift_service.DriftRunResult) -> DriftReport:
+    bundle = get_model_registry().get()
+    return DriftReport(
+        available=result.available,
+        reason=result.reason,
+        model_name=bundle.name if bundle else None,
+        model_version=bundle.version if bundle else None,
+        snapshot=(
+            DriftSnapshotOut.model_validate(result.snapshot)
+            if result.snapshot is not None
+            else None
+        ),
+    )
 
 
 def _require_bundle() -> ModelBundle:
@@ -231,3 +255,42 @@ async def run_recent(session: SessionDep, request: RunRequest) -> RunSummary:
         model_name=bundle.name,
         model_version=bundle.version,
     )
+
+
+# ----- Drift monitoring (GET → VIEWER+, POST → ANALYST+ via method-based RBAC) --
+
+
+@router.get("/drift/latest")
+async def drift_latest(session: SessionDep) -> DriftReport:
+    snapshot = await drift_service.get_latest_snapshot(session)
+    if snapshot is None:
+        return _drift_report(
+            drift_service.DriftRunResult(False, reason="no_snapshot")
+        )
+    return _drift_report(drift_service.DriftRunResult(True, snapshot=snapshot))
+
+
+@router.get("/drift/history")
+async def drift_history(
+    session: SessionDep,
+    limit: Annotated[int, Query(ge=1, le=200)] = 20,
+) -> DriftHistoryOut:
+    snapshots = await drift_service.list_snapshots(session, limit=limit)
+    return DriftHistoryOut(
+        items=[DriftSnapshotOut.model_validate(s) for s in snapshots]
+    )
+
+
+@router.post(
+    "/drift/run",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(rate_limit("detection"))],
+)
+async def drift_run(
+    session: SessionDep, request: DriftRunRequest | None = None
+) -> DriftReport:
+    req = request or DriftRunRequest()
+    result = await drift_service.run_drift_check(
+        session, window_hours=req.window_hours
+    )
+    return _drift_report(result)

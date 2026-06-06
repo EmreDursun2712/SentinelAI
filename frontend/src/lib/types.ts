@@ -17,6 +17,49 @@ export interface LoginResponse {
   user: AuthUser;
 }
 
+// ----- Drift monitoring ---------------------------------------------------
+
+export type DriftStatus = "OK" | "WATCH" | "DRIFT";
+
+export interface DriftFeature {
+  psi: number;
+  sample_count: number;
+}
+
+export interface DriftConfidenceStats {
+  count: number;
+  mean: number | null;
+  min: number | null;
+  max: number | null;
+  p95: number | null;
+}
+
+export interface DriftSnapshot {
+  id: number;
+  model_version_id: number | null;
+  window_start: string;
+  window_end: string;
+  sample_count: number;
+  feature_drift: Record<string, DriftFeature>;
+  prediction_distribution: Record<string, unknown>;
+  confidence_stats: DriftConfidenceStats;
+  drift_score: number | null;
+  status: DriftStatus;
+  created_at: string;
+}
+
+export interface DriftReport {
+  available: boolean;
+  reason: string | null;
+  model_name: string | null;
+  model_version: string | null;
+  snapshot: DriftSnapshot | null;
+}
+
+export interface DriftHistory {
+  items: DriftSnapshot[];
+}
+
 // ----- Enums --------------------------------------------------------------
 
 export type Severity = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";

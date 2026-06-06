@@ -113,7 +113,11 @@ demo day. Each item is tagged with severity for a course-project context.
   training-set median, which biases predictions toward the BENIGN profile
   for ambiguous rows. *Mitigation*: in `ml.train`, prefer synthetic data
   with the same column set as the demo CSVs, or train with the actual
-  CIC-IDS2017 columns.
+  CIC-IDS2017 columns. **Now observable:** the drift monitor
+  (`/api/v1/detection/drift/*` + dashboard Model-health panel) computes a
+  per-feature PSI vs the training baseline and flags OK/WATCH/DRIFT, so this
+  kind of skew surfaces instead of staying silent. Older artifacts without a
+  `metadata.baseline` block report drift "unavailable".
 - **Detection blocks the event loop on large batches.** Fixed in this
   pass — `predict_proba` is now offloaded via `asyncio.to_thread` in
   `detect_events`. For very large batches (≥ 50 k events) consider chunking.

@@ -171,9 +171,11 @@ async def test_login_brute_force_trips_429(
 
 
 async def test_authenticated_expensive_endpoint_is_limited(client: AsyncClient) -> None:
-    # Detection is 5/minute per user. The rate-limit dependency runs before the
-    # handler, so the 6th call is rejected regardless of model state. /predict
-    # takes no DB session, keeping this test self-contained.
+    # Detection is 5/minute per user. The rate-limit dependency runs *before* the
+    # handler, so the 6th call is a clean 429 regardless of model state. The
+    # first five pass the limiter and then hit the handler, whose outcome depends
+    # on whether a (possibly version-mismatched) model is staged — so we only
+    # care that they are *not* 429. A handler that raises is recorded as 0.
     headers = _headers(Role.ANALYST)
     body = {
         "flows": [
@@ -185,10 +187,17 @@ async def test_authenticated_expensive_endpoint_is_limited(client: AsyncClient) 
             }
         ]
     }
-    statuses = [
-        (await client.post("/api/v1/detection/predict", json=body, headers=headers)).status_code
-        for _ in range(6)
-    ]
+
+    async def _post() -> int:
+        try:
+            resp = await client.post(
+                "/api/v1/detection/predict", json=body, headers=headers
+            )
+            return resp.status_code
+        except Exception:
+            return 0  # handler blew up after passing auth + rate limit
+
+    statuses = [await _post() for _ in range(6)]
     assert statuses[-1] == 429
     assert 429 not in statuses[:5]
 

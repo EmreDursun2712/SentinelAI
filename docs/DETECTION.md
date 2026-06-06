@@ -53,6 +53,44 @@ detection — detection itself is a read-only inference step.
 | POST   | `/api/v1/detection/events/{event_id}` | Yes         | Detect one stored event; persists alert + decision.    |
 | POST   | `/api/v1/detection/batch`             | Yes         | Detect a list of `event_ids`; persists.                |
 | POST   | `/api/v1/detection/run`               | Yes         | Process the next `limit` un-detected events.           |
+| GET    | `/api/v1/detection/drift/latest`      | —           | Most recent drift snapshot (or `available:false`). VIEWER+. |
+| GET    | `/api/v1/detection/drift/history`     | —           | Recent drift snapshots (`?limit=`). VIEWER+.           |
+| POST   | `/api/v1/detection/drift/run`         | Yes         | Compute + persist a drift snapshot. ANALYST+.          |
+
+## Drift monitoring
+
+The model is trained once but traffic keeps changing. Drift monitoring flags
+when recent flows diverge from the distribution the model was trained on, so an
+analyst knows when predictions may no longer be trustworthy (time to retrain).
+
+**Baseline.** Training embeds a `baseline` block in `metadata.json` (see
+[ml/README.md](../../ml/README.md)): per-feature quantile bins + proportions,
+means/stds, and the training class distribution. Artifacts without it report
+drift **unavailable** (graceful degradation).
+
+**Computation** (`app/services/drift_service.py`, deterministic + unit-tested):
+
+* Pull recent `network_events` (features) and `alerts` (predictions/confidence)
+  in a window (default last 24h, configurable via `window_hours`).
+* For each baseline feature with enough recent samples, bucket recent values
+  into the baseline `bin_edges` and compute **PSI** vs the baseline `bin_props`.
+* Compute a **PSI over the prediction mix** (recent alert families vs the
+  baseline's non-benign class distribution).
+* `confidence_stats`: mean / min / max / p95 of recent alert confidence.
+* `drift_score` = mean PSI across all computed components.
+
+**Status bands** (standard PSI thresholds):
+
+| Status  | Score          | Meaning                                  |
+| ------- | -------------- | ---------------------------------------- |
+| `OK`    | `< 0.10`       | Distribution stable.                     |
+| `WATCH` | `0.10–0.25`    | Moderate shift; keep an eye on it.       |
+| `DRIFT` | `≥ 0.25`       | Significant shift; consider retraining.  |
+
+Each run persists a `model_drift_snapshots` row. The dashboard's **Model
+health** panel shows the latest status, drift score, sample count, average
+confidence, last-checked time, and the top drifting features; analysts/admins
+can trigger a check with **Run drift check**.
 
 ## Configuration
 

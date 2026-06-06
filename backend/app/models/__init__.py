@@ -13,6 +13,7 @@ from app.models.enums import (
     AlertDisposition,
     AlertStatus,
     ArtifactKind,
+    DriftStatus,
     IncidentKind,
     IngestionKind,
     IngestionStatus,
@@ -24,6 +25,7 @@ from app.models.enums import (
 from app.models.incident_report import IncidentReport
 from app.models.ingestion_job import IngestionJob
 from app.models.mixins import CreatedAtMixin, TimestampMixin
+from app.models.model_drift import ModelDriftSnapshot
 from app.models.model_version import ModelVersion
 from app.models.network_event import NetworkEvent
 from app.models.response_action import ResponseAction
@@ -38,11 +40,13 @@ __all__ = [
     "AlertStatus",
     "ArtifactKind",
     "CreatedAtMixin",
+    "DriftStatus",
     "IncidentKind",
     "IncidentReport",
     "IngestionJob",
     "IngestionKind",
     "IngestionStatus",
+    "ModelDriftSnapshot",
     "ModelVersion",
     "NetworkEvent",
     "ResponseAction",

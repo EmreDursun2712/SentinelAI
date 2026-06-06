@@ -119,13 +119,43 @@ Every training run produces a directory with four files:
 ```
 ml/artifacts/<version>/
 ├── model.joblib           sklearn Pipeline: SimpleImputer → classifier
-├── metadata.json          name, version, algorithm, classes, feature_order, training params, metrics summary
+├── metadata.json          name, version, algorithm, classes, feature_order, training params, metrics summary, baseline
 ├── metrics.json           validation + test scalar/per-class metrics
 └── confusion_matrix.json  matrices for validation + test
 ```
 
 `ml/artifacts/latest/` is a copy of the most recent run so the backend can
 default to `<root>/latest/` when no `model_versions` DB row has been activated.
+
+### Drift baseline (`metadata.baseline`)
+
+To support backend **drift monitoring**, `metadata.json` carries a `baseline`
+block computed from the training split (`ml/baseline.py`):
+
+```jsonc
+"baseline": {
+  "version": 1,
+  "sample_count": 36000,
+  "n_bins": 10,
+  "class_distribution": { "BENIGN": 0.71, "DDoS": 0.07, ... },   // proportions
+  "features": {
+    "flow_duration": {
+      "mean": 1487.3, "std": 902.1,
+      "bin_edges": [ ... 11 quantile edges ... ],   // 10 bins
+      "bin_props": [ ... 10 proportions summing to 1 ... ]
+    },
+    ...
+  }
+}
+```
+
+The backend buckets recent traffic into these `bin_edges` and computes a PSI
+against `bin_props` per feature (plus a PSI over the prediction mix). The
+bucketing convention in `ml.baseline.bin_props` must match the backend's
+`drift_service.bucket_props` exactly. **Artifacts trained before this block
+existed are handled gracefully — the backend reports drift "unavailable".**
+Constant/degenerate features (fewer than two distinct quantile edges) are
+omitted from the baseline.
 
 ### How the backend will load it
 

@@ -7,6 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.models.enums import DriftStatus
 from app.schemas.ingestion import FlowRecordIn
 
 
@@ -58,3 +59,40 @@ class ModelInfoOut(BaseModel):
     benign_label: str | None = None
 
     model_config = ConfigDict(from_attributes=False)
+
+
+# ----- Drift monitoring ---------------------------------------------------
+
+
+class DriftRunRequest(BaseModel):
+    window_hours: int = Field(default=24, ge=1, le=720)
+
+
+class DriftSnapshotOut(BaseModel):
+    id: int
+    model_version_id: int | None
+    window_start: datetime
+    window_end: datetime
+    sample_count: int
+    feature_drift: dict[str, Any]
+    prediction_distribution: dict[str, Any]
+    confidence_stats: dict[str, Any]
+    drift_score: float | None
+    status: DriftStatus
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DriftReport(BaseModel):
+    """Envelope so the UI can distinguish 'no drift data' from an actual result."""
+
+    available: bool
+    reason: str | None = None
+    model_name: str | None = None
+    model_version: str | None = None
+    snapshot: DriftSnapshotOut | None = None
+
+
+class DriftHistoryOut(BaseModel):
+    items: list[DriftSnapshotOut]

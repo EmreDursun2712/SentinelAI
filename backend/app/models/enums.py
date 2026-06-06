@@ -113,3 +113,11 @@ class ResponseStatus(str, enum.Enum):
 class IncidentKind(str, enum.Enum):
     PER_ALERT = "PER_ALERT"
     DAILY_SUMMARY = "DAILY_SUMMARY"
+
+
+class DriftStatus(str, enum.Enum):
+    """Drift severity bucket derived from the overall drift score."""
+
+    OK = "OK"          # score < 0.10 — distribution stable
+    WATCH = "WATCH"    # 0.10 ≤ score < 0.25 — moderate shift, keep an eye on it
+    DRIFT = "DRIFT"    # score ≥ 0.25 — significant shift, model may need retraining

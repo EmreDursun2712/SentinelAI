@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 
+import { ModelHealthPanel } from "@/components/dashboard/ModelHealthPanel";
 import { AlertsOverTimeChart } from "@/components/charts/AlertsOverTimeChart";
 import { SeverityDistributionChart } from "@/components/charts/SeverityDistributionChart";
 import { TopPredictionsChart } from "@/components/charts/TopPredictionsChart";
@@ -86,6 +87,9 @@ export default function DashboardPage() {
           hint={`+${ov?.high_alerts ?? 0} HIGH severity`}
         />
       </div>
+
+      {/* Model health / drift monitoring */}
+      <ModelHealthPanel />
 
       {/* Charts row 1: stacked area (wide) */}
       <Card padding="md">
