@@ -138,6 +138,12 @@ export default function IngestionPage() {
     refetchInterval: 5_000,
   });
 
+  const sensorQ = useQuery({
+    queryKey: ["ingest", "sensor", "status"],
+    queryFn: ingestionApi.getSensorStatus,
+    refetchInterval: 10_000,
+  });
+
   // -------- step states --------
 
   const step1State: StepState = step1Error
@@ -174,6 +180,39 @@ export default function IngestionPage() {
           )
         }
       />
+
+      {/* Live sensor (lab-only). Liveness is inferred from recent ingest
+          activity — the backend doesn't run the sensor process itself. */}
+      <Card padding="none">
+        <div className="flex items-center justify-between px-5 py-3">
+          <div className="flex items-center gap-2">
+            <span
+              className={cn(
+                "inline-block h-2 w-2 rounded-full",
+                sensorQ.data?.live ? "bg-emerald-400" : "bg-slate-600",
+              )}
+            />
+            <div>
+              <h3 className="text-sm font-semibold text-slate-200">Live sensor</h3>
+              <p className="text-xs text-slate-500">
+                Zeek/Suricata flow feed · lab-only, off by default
+              </p>
+            </div>
+          </div>
+          <div className="text-right text-xs">
+            <Badge tone={sensorQ.data?.live ? "success" : "neutral"}>
+              {sensorQ.isError ? "unknown" : sensorQ.data?.live ? "receiving" : "idle"}
+            </Badge>
+            {sensorQ.data?.last_event_at && (
+              <p className="mt-1 text-slate-500">
+                last flow {formatRelative(sensorQ.data.last_event_at)} ·{" "}
+                {sensorQ.data.events_recent} in last{" "}
+                {sensorQ.data.live_window_seconds}s
+              </p>
+            )}
+          </div>
+        </div>
+      </Card>
 
       {/* ---------- Step 1: Upload ---------- */}
       <StepCard

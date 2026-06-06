@@ -56,6 +56,13 @@ class Settings(BaseSettings):
     # Detection
     detection_threshold: float = 0.5
     detection_benign_label: str = "BENIGN"
+    # When true, the batch ingest endpoint runs detection on freshly-queued
+    # events right after insert (bounded). Off by default — opt-in for demos.
+    detection_auto_run_on_ingest: bool = False
+    detection_auto_run_limit: int = 1000
+
+    # Live-sensor status: how recent ingest activity must be to count as "live".
+    sensor_live_window_seconds: int = 120
 
     # Reporting
     reports_dir: str = "data/reports"

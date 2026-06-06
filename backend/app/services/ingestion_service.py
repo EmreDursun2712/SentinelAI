@@ -12,10 +12,10 @@ Flow:
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from typing import BinaryIO
+from datetime import UTC, datetime, timedelta
+from typing import Any, BinaryIO
 
-from sqlalchemy import update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.events import EventType, publish_event
@@ -146,6 +146,81 @@ async def insert_single_flow(session: AsyncSession, flow_in: ParsedFlow) -> Netw
     await session.commit()
     await session.refresh(event)
     return event
+
+
+async def insert_flow_batch(
+    session: AsyncSession, flows: list[ParsedFlow], *, kind: IngestionKind = IngestionKind.STREAM
+) -> int:
+    """Bulk-insert a batch of pre-validated flows (e.g. from the live sensor).
+
+    Records a lightweight STREAM ``IngestionJob`` for auditability, inserts the
+    events, and commits. Returns the number of events inserted.
+    """
+    if not flows:
+        return 0
+
+    job = IngestionJob(
+        kind=kind,
+        source="sensor:batch",
+        status=IngestionStatus.RUNNING,
+        started_at=datetime.now(UTC),
+    )
+    session.add(job)
+    await session.flush()
+    job_id = job.id
+
+    events = [_to_orm(f, job_id) for f in flows]
+    session.add_all(events)
+    await session.flush()
+
+    await session.execute(
+        update(IngestionJob)
+        .where(IngestionJob.id == job_id)
+        .values(
+            status=IngestionStatus.COMPLETED,
+            records_total=len(flows),
+            records_done=len(flows),
+            records_failed=0,
+            completed_at=datetime.now(UTC),
+        )
+    )
+    await session.commit()
+    logger.info("ingestion.batch_inserted", job_id=job_id, count=len(events))
+    await publish_event(
+        EventType.INGESTION_JOB_COMPLETED,
+        {"job_id": job_id, "total_rows": len(flows), "valid_rows": len(flows), "invalid_rows": 0},
+    )
+    return len(events)
+
+
+async def sensor_status(session: AsyncSession, *, live_window_seconds: int) -> dict[str, Any]:
+    """Ingest-activity summary used as a live-sensor liveness proxy.
+
+    The backend doesn't run the sensor process, so 'live' means 'events arrived
+    within the live window'. Reports last event time + recent counts.
+    """
+    now = datetime.now(UTC)
+    since = now - timedelta(seconds=live_window_seconds)
+
+    total = int((await session.execute(select(func.count(NetworkEvent.id)))).scalar_one() or 0)
+    last_event_at = (
+        await session.execute(select(func.max(NetworkEvent.created_at)))
+    ).scalar_one_or_none()
+    recent = int(
+        (
+            await session.execute(
+                select(func.count(NetworkEvent.id)).where(NetworkEvent.created_at >= since)
+            )
+        ).scalar_one()
+        or 0
+    )
+    return {
+        "live": recent > 0,
+        "last_event_at": last_event_at,
+        "events_recent": recent,
+        "total_events": total,
+        "live_window_seconds": live_window_seconds,
+    }
 
 
 def _to_orm(parsed: ParsedFlow, job_id: int | None) -> NetworkEvent:

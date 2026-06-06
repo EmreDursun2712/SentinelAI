@@ -1,5 +1,9 @@
-import type { IngestionJob, IngestionSummary } from "@/lib/types";
+import type { IngestionJob, IngestionSummary, SensorStatus } from "@/lib/types";
 import { qs, request } from "./client";
+
+export function getSensorStatus(): Promise<SensorStatus> {
+  return request<SensorStatus>("/ingest/sensor/status");
+}
 
 export function listIngestionJobs(limit = 50): Promise<IngestionJob[]> {
   return request<IngestionJob[]>(`/ingest/jobs${qs({ limit })}`);

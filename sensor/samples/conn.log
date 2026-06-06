@@ -1,0 +1,10 @@
+#separator \x09
+#set_separator	,
+#empty_field	(empty)
+#unset_field	-
+#path	conn
+#fields	ts	uid	id.orig_h	id.orig_p	id.resp_h	id.resp_p	proto	service	duration	orig_bytes	resp_bytes	conn_state	local_orig	local_resp	missed_bytes	history	orig_pkts	orig_ip_bytes	resp_pkts	resp_ip_bytes	tunnel_parents
+#types	time	string	addr	port	addr	port	enum	string	interval	count	count	string	bool	bool	count	string	count	count	count	count	set[string]
+1735689600.123456	Cabc1	192.168.1.10	44321	192.168.1.20	443	tcp	ssl	1.500000	1200	8400	SF	-	-	0	ShADadFf	12	1800	14	9000	-
+1735689601.987654	Cabc2	10.0.0.5	51000	8.8.8.8	53	udp	dns	0.020000	60	140	SF	-	-	0	Dd	1	88	1	168	-
+1735689602.111	Cabc3	192.168.1.10	44322	192.168.1.50	22	tcp	ssh	12.0	5000	4000	SF	-	-	0	ShADadFf	40	6000	38	5000	-

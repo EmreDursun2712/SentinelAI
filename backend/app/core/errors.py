@@ -42,6 +42,11 @@ class AppError(Exception):
         self.headers = headers
 
 
+class BadRequestError(AppError):
+    code = "bad_request"
+    status_code = status.HTTP_400_BAD_REQUEST
+
+
 class NotFoundError(AppError):
     code = "not_found"
     status_code = status.HTTP_404_NOT_FOUND

@@ -5,8 +5,10 @@ Surface:
     POST /api/v1/ingest/upload   multipart CSV upload
     POST /api/v1/ingest/replay   ingest a CSV under the server-side data dir
     POST /api/v1/ingest/flow     single-record ingest
+    POST /api/v1/ingest/flows    batch ingest (live sensor)
     GET  /api/v1/ingest/jobs     list jobs
     GET  /api/v1/ingest/jobs/{id}  single job detail
+    GET  /api/v1/ingest/sensor/status  live-sensor activity proxy
 """
 
 from __future__ import annotations
@@ -15,25 +17,38 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Query, UploadFile, status
+from pydantic import ValidationError
 from sqlalchemy import desc, select
 
 from app.api.deps import SessionDep, rate_limit
 from app.core.config import get_settings
-from app.core.errors import AppError, NotFoundError
+from app.core.errors import AppError, BadRequestError, NotFoundError
+from app.core.logging import get_logger
 from app.ingestion.csv_loader import CsvFormatError
 from app.ingestion.parser import ParsedFlow
 from app.models import IngestionJob
 from app.models.enums import IngestionKind
 from app.schemas.ingestion import (
+    FlowBatchIn,
+    FlowBatchSummary,
     FlowRecordIn,
     FlowRecordOut,
     IngestionJobOut,
     IngestionSummary,
     ReplayRequest,
+    SensorStatusOut,
 )
-from app.services.ingestion_service import ingest_csv, insert_single_flow
+from app.services.detection_service import detect_events, fetch_undetected_events
+from app.services.ingestion_service import (
+    ingest_csv,
+    insert_flow_batch,
+    insert_single_flow,
+    sensor_status,
+)
+from app.services.model_registry import get_model_registry
 
 router = APIRouter(prefix="/ingest")
+logger = get_logger(__name__)
 
 
 @router.post(
@@ -116,6 +131,70 @@ async def ingest_flow(session: SessionDep, flow: FlowRecordIn) -> FlowRecordOut:
     parsed = ParsedFlow.model_validate(flow.model_dump())
     event = await insert_single_flow(session, parsed)
     return FlowRecordOut.model_validate(event)
+
+
+@router.post(
+    "/flows",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit("ingest"))],
+)
+async def ingest_flows(session: SessionDep, batch: FlowBatchIn) -> FlowBatchSummary:
+    """Batch-ingest flows from the live sensor (Zeek/Suricata/pcap-replay).
+
+    Requires ANALYST+ (method-based RBAC) — the sensor authenticates with a
+    service/analyst JWT. When ``SENTINEL_DETECTION_AUTO_RUN_ON_INGEST`` is set,
+    detection runs on the freshly-queued events right after insert (bounded);
+    failures there never fail the ingest, which is already committed.
+    """
+    settings = get_settings()
+    try:
+        parsed = [ParsedFlow.model_validate(f.model_dump()) for f in batch.flows]
+    except ValidationError as exc:
+        # Keep only JSON-safe fields (pydantic's ctx can hold raw exceptions).
+        errors = [
+            {"loc": list(e.get("loc", ())), "msg": str(e.get("msg")), "type": str(e.get("type"))}
+            for e in exc.errors()[:20]
+        ]
+        raise BadRequestError(
+            "One or more flows failed validation.", details={"errors": errors}
+        ) from exc
+    inserted = await insert_flow_batch(session, parsed)
+
+    detection_ran = False
+    alerts_created = 0
+    if settings.detection_auto_run_on_ingest and get_model_registry().is_loaded():
+        try:
+            bundle = get_model_registry().get()
+            events = await fetch_undetected_events(session, settings.detection_auto_run_limit)
+            if events and bundle is not None:
+                predictions = await detect_events(
+                    session,
+                    bundle,
+                    events,
+                    threshold=settings.detection_threshold,
+                    benign_label=settings.detection_benign_label,
+                )
+                detection_ran = True
+                alerts_created = sum(1 for p in predictions if p.alert_created)
+        except Exception:
+            logger.exception("ingest.auto_detection_failed")
+
+    return FlowBatchSummary(
+        received=len(batch.flows),
+        inserted=inserted,
+        detection_ran=detection_ran,
+        alerts_created=alerts_created,
+    )
+
+
+@router.get("/sensor/status")
+async def get_sensor_status(session: SessionDep) -> SensorStatusOut:
+    """Live-sensor liveness proxy (recent ingest activity). VIEWER+."""
+    settings = get_settings()
+    status_data = await sensor_status(
+        session, live_window_seconds=settings.sensor_live_window_seconds
+    )
+    return SensorStatusOut.model_validate(status_data)
 
 
 @router.get("/jobs")

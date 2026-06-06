@@ -54,6 +54,7 @@ services:
       SENTINEL_LOG_LEVEL: ${BACKEND_LOG_LEVEL:-info}
       SENTINEL_BOOTSTRAP_ADMIN_USERNAME: ${BACKEND_BOOTSTRAP_ADMIN_USERNAME:-}
       SENTINEL_BOOTSTRAP_ADMIN_PASSWORD: ${BACKEND_BOOTSTRAP_ADMIN_PASSWORD:-}
+      SENTINEL_DETECTION_AUTO_RUN_ON_INGEST: ${BACKEND_DETECTION_AUTO_RUN_ON_INGEST:-false}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
@@ -94,6 +95,33 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+
+  # Live-flow sensor — LAB ONLY, OFF by default. It only starts with the
+  # "sensor" profile (`docker compose --profile sensor up sensor`) AND only runs
+  # if SENTINEL_SENSOR_ENABLED=true with authorized CIDRs set. It reads flow
+  # logs from a mounted read-only path — no NIC binding, no raw capture.
+  sensor:
+    build:
+      context: ./sensor
+      dockerfile: Dockerfile
+    container_name: sentinelai-sensor
+    profiles: ["sensor"]
+    restart: "no"
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      SENTINEL_SENSOR_ENABLED: ${SENSOR_ENABLED:-false}
+      SENTINEL_SENSOR_MODE: ${SENSOR_MODE:-pcap_replay}
+      SENTINEL_SENSOR_INPUT_PATH: ${SENSOR_INPUT_PATH:-/logs/conn.log}
+      SENTINEL_SENSOR_ALLOWED_CIDRS: ${SENSOR_ALLOWED_CIDRS:-}
+      SENTINEL_SENSOR_API_URL: ${SENSOR_API_URL:-http://backend:8000}
+      SENTINEL_SENSOR_API_TOKEN: ${SENSOR_API_TOKEN:-}
+      SENTINEL_SENSOR_BATCH_SIZE: ${SENSOR_BATCH_SIZE:-100}
+      SENTINEL_SENSOR_INTERVAL_SECONDS: ${SENSOR_INTERVAL_SECONDS:-2}
+    volumes:
+      # Mount your authorized lab's flow logs here, read-only.
+      - ${SENSOR_LOG_DIR:-./sensor/samples}:/logs:ro
 
 volumes:
   postgres_data:

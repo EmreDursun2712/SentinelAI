@@ -60,6 +60,16 @@ export interface DriftHistory {
   items: DriftSnapshot[];
 }
 
+// ----- Live sensor --------------------------------------------------------
+
+export interface SensorStatus {
+  live: boolean;
+  last_event_at: string | null;
+  events_recent: number;
+  total_events: number;
+  live_window_seconds: number;
+}
+
 // ----- Enums --------------------------------------------------------------
 
 export type Severity = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";

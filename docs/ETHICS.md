@@ -10,8 +10,19 @@ or alter infrastructure outside its own container network.
    requires explicit instructor approval.
 2. **No outbound integrations.** The codebase ships no client for firewalls, EDR agents, ticketing
    systems, paging services, or chat platforms. Notifications stay inside the dashboard.
-3. **No live packet capture.** Ingestion reads CIC-IDS2017 CSV records from disk. There is no
-   `tcpdump`, `pcap`, or NIC-binding code in the repository.
+3. **No packet capture, no payloads — flow metadata only.** SentinelAI never binds a NIC,
+   never runs `tcpdump`/`pcap`, and never reads or stores packet payloads. Besides offline
+   CIC-IDS2017 CSVs, an **optional log-tailing sensor** (`sensor/`) can feed *real* flow
+   metadata from logs that Zeek/Suricata already produced. It is governed by hard controls:
+   - **Disabled by default** — refuses to start unless `SENTINEL_SENSOR_ENABLED=true`.
+   - **Authorized scope only** — refuses to run without `SENTINEL_SENSOR_ALLOWED_CIDRS`; every
+     flow whose endpoints fall outside those lab subnets is dropped before it is sent.
+   - **Metadata only** — it parses the 5-tuple, byte/packet counts, and duration; payload
+     fields are never read or stored, and logs print counts, not contents.
+   - **Authenticated** — batches require an ANALYST/ADMIN JWT and go through the same RBAC +
+     rate limits as every other write.
+   - Use only on networks you own or are explicitly authorized to monitor. See
+     [LIVE_SENSOR.md](LIVE_SENSOR.md).
 4. **No exfiltration.** Reports are written to the local `backend/data/reports/` volume.
 5. **Dataset license respected.** The CIC-IDS2017 dataset is downloaded by the developer under
    its existing license terms; raw files are gitignored.

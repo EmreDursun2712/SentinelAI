@@ -44,3 +44,5 @@ ml/artifacts/*.pkl
 
 # Logs
 *.log
+# ...but keep the sensor's sample flow logs (test + demo fixtures).
+!sensor/samples/*.log

@@ -300,6 +300,41 @@ make demo-seed
 
 ---
 
+## 6. Optional: live sensor (authorized lab networks only)
+
+> ⚠️ Only on a network you own or are explicitly authorized to monitor. Off by
+> default; reads flow **logs** (Zeek/Suricata), never raw packets or payloads.
+
+For an advanced demo you can show *real* flows arriving instead of CSV replay.
+Easiest is `pcap_replay` against the bundled sample flow log — no Zeek/Suricata
+install needed:
+
+```bash
+# 1. Get an analyst/admin token from your running stack
+TOKEN=$(curl -fsS localhost:8000/api/v1/auth/login -H 'content-type: application/json' \
+  -d '{"username":"admin","password":"<pw>"}' | jq -r .access_token)
+
+# 2. (optional) auto-run detection after each batch for a live feel
+#    set SENTINEL_DETECTION_AUTO_RUN_ON_INGEST=true on the backend, then restart it
+
+# 3. Replay the sample flow log through the sensor (lab CIDRs cover the sample IPs)
+cd sensor && pip install -e .
+SENTINEL_SENSOR_ENABLED=true \
+SENTINEL_SENSOR_MODE=pcap_replay \
+SENTINEL_SENSOR_INPUT_PATH=./samples/conn.log \
+SENTINEL_SENSOR_ALLOWED_CIDRS=192.168.0.0/16,10.0.0.0/8 \
+SENTINEL_SENSOR_API_URL=http://localhost:8000 \
+SENTINEL_SENSOR_API_TOKEN="$TOKEN" \
+python -m sentinelai_sensor
+```
+
+Then show the Ingestion page's **Live sensor** card flip to *receiving*, and the
+new flows turning into alerts. For a real Zeek/Suricata feed, point
+`SENTINEL_SENSOR_MODE`/`INPUT_PATH` at your sensor's `conn.log`/`eve.json` and set
+`ALLOWED_CIDRS` to your lab subnets. Full guide: [LIVE_SENSOR.md](LIVE_SENSOR.md).
+
+---
+
 ## TL;DR
 
 ```bash

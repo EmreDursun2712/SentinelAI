@@ -55,6 +55,30 @@ class IngestionSummary(BaseModel):
     errors_truncated: bool = False
 
 
+class FlowBatchIn(BaseModel):
+    """Batch of flows posted by the live sensor to ``POST /api/v1/ingest/flows``."""
+
+    flows: list[FlowRecordIn] = Field(..., min_length=1, max_length=1000)
+
+
+class FlowBatchSummary(BaseModel):
+    received: int
+    inserted: int
+    detection_ran: bool = False
+    alerts_created: int = 0
+
+
+class SensorStatusOut(BaseModel):
+    """Ingest-activity proxy for live-sensor liveness (the backend doesn't run
+    the sensor process itself)."""
+
+    live: bool
+    last_event_at: datetime | None
+    events_recent: int
+    total_events: int
+    live_window_seconds: int
+
+
 class ReplayRequest(BaseModel):
     """Body for ``POST /api/v1/ingest/replay``.
 

@@ -15,6 +15,7 @@ SentinelAI/
 ├── backend/      FastAPI app, SQLAlchemy models, agent modules, tests
 ├── frontend/     React + TypeScript + Vite dashboard
 ├── ml/           Offline training pipeline (CIC-IDS2017)
+├── sensor/       Optional live-flow sensor (Zeek/Suricata log tailing, lab-only)
 ├── infra/        Postgres init, helper scripts, reverse-proxy config
 ├── docs/         Architecture, ethics, quality, agent guides
 ├── docker-compose.yml
@@ -216,9 +217,27 @@ clone to a working demo in one command.
 
 ---
 
+## Live sensor (optional, lab-only)
+
+Beyond offline CSV replay, an optional **log-tailing sensor** (`sensor/`) can feed
+*real* flow metadata from logs that Zeek or Suricata already produced, into the
+batch endpoint `POST /api/v1/ingest/flows`. It reads flow **metadata only** — no
+NIC binding, no packet capture, no payloads — and is **disabled by default**. It
+refuses to run unless explicitly enabled and scoped to authorized lab subnets:
+
+```bash
+# .env: SENSOR_ENABLED=true, SENSOR_ALLOWED_CIDRS=..., SENSOR_API_TOKEN=<analyst JWT>
+docker compose --profile sensor up sensor
+```
+
+**Use only on networks you own or are explicitly authorized to monitor.** Full
+guide and safety model: [docs/LIVE_SENSOR.md](docs/LIVE_SENSOR.md).
+
 ## Ethics
 
 Every `ResponseAction` row is hard-locked to `simulated = TRUE` by a
 PostgreSQL `CHECK` constraint — the database itself refuses to store any
 row marked otherwise. No code path attempts to contact a real firewall,
-EDR, host agent, or third-party service. See [docs/ETHICS.md](docs/ETHICS.md).
+EDR, host agent, or third-party service. The optional live sensor reads flow
+**metadata only** (never payloads), is off by default, and runs only against
+explicitly authorized lab subnets. See [docs/ETHICS.md](docs/ETHICS.md).
