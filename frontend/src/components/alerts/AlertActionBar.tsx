@@ -5,9 +5,8 @@ import { Card } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
 import { cn } from "@/lib/cn";
 import { alertsApi, investigationApi } from "@/lib/api";
+import { useAuth } from "@/lib/auth/AuthContext";
 import type { AlertDetail, AlertDisposition } from "@/lib/types";
-
-const ANALYST_ID = "ui-analyst";
 
 const DISPOSITION_BUTTONS: Array<{
   value: AlertDisposition;
@@ -32,6 +31,8 @@ interface AlertActionBarProps {
 
 export function AlertActionBar({ alert }: AlertActionBarProps) {
   const qc = useQueryClient();
+  const { user } = useAuth();
+  const analystId = user?.username;
 
   const invalidateAlert = () => {
     qc.invalidateQueries({ queryKey: ["alert", alert.id] });
@@ -44,7 +45,7 @@ export function AlertActionBar({ alert }: AlertActionBarProps) {
     mutationFn: (d: AlertDisposition) =>
       alertsApi.setAlertDisposition(alert.id, {
         disposition: d,
-        analyst_id: ANALYST_ID,
+        analyst_id: analystId,
       }),
     onSuccess: invalidateAlert,
   });
@@ -65,7 +66,7 @@ export function AlertActionBar({ alert }: AlertActionBarProps) {
   });
 
   const closeMut = useMutation({
-    mutationFn: () => alertsApi.closeAlert(alert.id, { analyst_id: ANALYST_ID }),
+    mutationFn: () => alertsApi.closeAlert(alert.id, { analyst_id: analystId }),
     onSuccess: invalidateAlert,
   });
 

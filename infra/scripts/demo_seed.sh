@@ -26,6 +26,10 @@ set -euo pipefail
 BASE="${SENTINELAI_BASE_URL:-http://localhost:8000}"
 API="$BASE/api/v1"
 
+# Bootstrap-admin credentials for the protected API (env override, else .env).
+SEED_USER="${SENTINELAI_USERNAME:-${BACKEND_BOOTSTRAP_ADMIN_USERNAME:-admin}}"
+SEED_PASS="${SENTINELAI_PASSWORD:-${BACKEND_BOOTSTRAP_ADMIN_PASSWORD:-}}"
+
 # ---------- output helpers ----------
 
 if [[ -t 1 ]]; then
@@ -49,7 +53,22 @@ printf "%sSentinelAI demo seed%s — target: %s\n" "$C_STEP" "$C_RESET" "$BASE"
 
 curl -fsS "$BASE/health" >/dev/null \
     || fail "backend not reachable — run \`make bootstrap\` first"
-MODEL_LOADED=$(curl -fsS "$API/detection/model" | jq -r '.loaded')
+
+# Read the bootstrap password from .env if not already in the environment.
+if [[ -z "$SEED_PASS" && -f .env ]]; then
+    SEED_PASS=$(grep -E '^BACKEND_BOOTSTRAP_ADMIN_PASSWORD=' .env | tail -1 | cut -d= -f2-)
+fi
+[[ -n "$SEED_PASS" ]] \
+    || fail "no password — export SENTINELAI_PASSWORD (or set BACKEND_BOOTSTRAP_ADMIN_PASSWORD)"
+TOKEN=$(curl -fsS -X POST -H 'Content-Type: application/json' \
+    -d "$(jq -nc --arg u "$SEED_USER" --arg p "$SEED_PASS" '{username:$u,password:$p}')" \
+    "$API/auth/login" | jq -r '.access_token') \
+    || fail "login failed for '$SEED_USER' — is the bootstrap admin created?"
+[[ -n "$TOKEN" && "$TOKEN" != "null" ]] || fail "login returned no access_token"
+AUTHZ=(-H "Authorization: Bearer $TOKEN")
+ok "authenticated as '$SEED_USER'"
+
+MODEL_LOADED=$(curl -fsS "${AUTHZ[@]}" "$API/detection/model" | jq -r '.loaded')
 [[ "$MODEL_LOADED" == "true" ]] \
     || fail "detection model not loaded — run \`make seed\` first"
 ok "stack is healthy and a model is loaded"
@@ -57,7 +76,7 @@ ok "stack is healthy and a model is loaded"
 # ---------- 1. ingest ----------
 
 step "1. Ingest bundled sample CSV"
-INGEST=$(curl -fsS -X POST -H 'Content-Type: application/json' \
+INGEST=$(curl -fsS -X POST "${AUTHZ[@]}" -H 'Content-Type: application/json' \
     -d '{"file":"samples/sample_flows.csv","rate":50}' \
     "$API/ingest/replay")
 VALID=$(echo "$INGEST" | jq -r '.valid_rows')
@@ -68,7 +87,7 @@ ok "ingested $VALID / $TOTAL row(s)"
 # ---------- 2. detection ----------
 
 step "2. Run detection"
-DETECT=$(curl -fsS -X POST -H 'Content-Type: application/json' \
+DETECT=$(curl -fsS -X POST "${AUTHZ[@]}" -H 'Content-Type: application/json' \
     -d '{"limit":5000}' "$API/detection/run")
 PROCESSED=$(echo "$DETECT" | jq -r '.processed')
 ALERTS=$(echo "$DETECT" | jq -r '.alerts_created')
@@ -78,20 +97,20 @@ note "by label: $(echo "$DETECT" | jq -cr '.by_label')"
 # ---------- 3. flagship alert: confirm + investigate + report ----------
 
 step "3. Hero alert — confirm + investigate + report"
-TOP_ID=$(curl -fsS "$API/alerts?sort=priority&limit=1" | jq -r '.[0].id // empty')
+TOP_ID=$(curl -fsS "${AUTHZ[@]}" "$API/alerts?sort=priority&limit=1" | jq -r '.[0].id // empty')
 [[ -n "$TOP_ID" ]] || fail "no alerts produced — model may be misclassifying"
 note "top alert: #$TOP_ID"
 
-curl -fsS -X POST -H 'Content-Type: application/json' \
+curl -fsS -X POST "${AUTHZ[@]}" -H 'Content-Type: application/json' \
     -d '{"disposition":"CONFIRMED","analyst_id":"demo-seed","note":"Confirmed by pre-demo seed script."}' \
     "$API/alerts/$TOP_ID/disposition" >/dev/null
 ok "alert #$TOP_ID disposition = CONFIRMED"
 
-curl -fsS -X POST -H 'Content-Type: application/json' -d '{}' \
+curl -fsS -X POST "${AUTHZ[@]}" -H 'Content-Type: application/json' -d '{}' \
     "$API/alerts/$TOP_ID/investigate" >/dev/null
 ok "investigation packet generated for #$TOP_ID"
 
-REPORT=$(curl -fsS -X POST -H 'Content-Type: application/json' -d '{}' \
+REPORT=$(curl -fsS -X POST "${AUTHZ[@]}" -H 'Content-Type: application/json' -d '{}' \
     "$API/alerts/$TOP_ID/report")
 REPORT_ID=$(echo "$REPORT" | jq -r '.report_id')
 ok "report #$REPORT_ID generated for #$TOP_ID"
@@ -100,10 +119,10 @@ ok "report #$REPORT_ID generated for #$TOP_ID"
 
 step "4. Second alert — mark UNDER_REVIEW"
 # Pick the second-highest-priority alert that isn't the hero.
-SECOND_ID=$(curl -fsS "$API/alerts?sort=priority&limit=5" \
+SECOND_ID=$(curl -fsS "${AUTHZ[@]}" "$API/alerts?sort=priority&limit=5" \
     | jq -r ".[] | select(.id != $TOP_ID) | .id" | head -n 1)
 if [[ -n "$SECOND_ID" ]]; then
-    curl -fsS -X POST -H 'Content-Type: application/json' \
+    curl -fsS -X POST "${AUTHZ[@]}" -H 'Content-Type: application/json' \
         -d '{"disposition":"UNDER_REVIEW","analyst_id":"demo-seed","note":"Triaging — needs more context."}' \
         "$API/alerts/$SECOND_ID/disposition" >/dev/null
     ok "alert #$SECOND_ID disposition = UNDER_REVIEW"
@@ -114,7 +133,7 @@ fi
 # ---------- 5. response actions: approve one, reject another ----------
 
 step "5. Response queue — approve + reject"
-PENDING_IDS=$(curl -fsS "$API/response/pending?limit=10" | jq -r '.[].id')
+PENDING_IDS=$(curl -fsS "${AUTHZ[@]}" "$API/response/pending?limit=10" | jq -r '.[].id')
 APPROVED_COUNT=0
 REJECTED_COUNT=0
 PENDING_ARRAY=()
@@ -123,14 +142,14 @@ while IFS= read -r line; do
 done <<< "$PENDING_IDS"
 
 if [[ "${#PENDING_ARRAY[@]}" -ge 1 ]]; then
-    curl -fsS -X POST -H 'Content-Type: application/json' \
+    curl -fsS -X POST "${AUTHZ[@]}" -H 'Content-Type: application/json' \
         -d '{"analyst_id":"demo-seed","note":"Approved by demo seed."}' \
         "$API/response/${PENDING_ARRAY[0]}/approve" >/dev/null \
         && APPROVED_COUNT=1
     ok "approved response action #${PENDING_ARRAY[0]}"
 fi
 if [[ "${#PENDING_ARRAY[@]}" -ge 2 ]]; then
-    curl -fsS -X POST -H 'Content-Type: application/json' \
+    curl -fsS -X POST "${AUTHZ[@]}" -H 'Content-Type: application/json' \
         -d '{"analyst_id":"demo-seed","reason":"Internal scanner, not a real threat."}' \
         "$API/response/${PENDING_ARRAY[1]}/reject" >/dev/null \
         && REJECTED_COUNT=1
@@ -143,7 +162,7 @@ fi
 # ---------- 6. daily summary ----------
 
 step "6. Daily summary report"
-DAILY=$(curl -fsS -X POST -H 'Content-Type: application/json' -d '{}' \
+DAILY=$(curl -fsS -X POST "${AUTHZ[@]}" -H 'Content-Type: application/json' -d '{}' \
     "$API/reports/daily/run")
 DAILY_ID=$(echo "$DAILY" | jq -r '.report_id')
 DAILY_ALERTS=$(echo "$DAILY" | jq -r '.packet.total_alerts')

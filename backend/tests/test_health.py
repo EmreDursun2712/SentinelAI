@@ -47,15 +47,16 @@ async def test_404_returns_error_envelope(client: AsyncClient) -> None:
     assert "request_id" in body
 
 
+# These two double as route-registration checks: a 401 (not a 404) proves the
+# route exists and is wired behind auth. The authenticated "happy path" for
+# reads is covered by test_auth.py (GET /auth/me) and the e2e smoke test.
 @pytest.mark.asyncio
-async def test_alerts_route_registered(client: AsyncClient) -> None:
+async def test_alerts_requires_auth(client: AsyncClient) -> None:
     response = await client.get("/api/v1/alerts")
-    assert response.status_code == 200
-    assert response.json() == []
+    assert response.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_response_pending_route_registered(client: AsyncClient) -> None:
+async def test_response_pending_requires_auth(client: AsyncClient) -> None:
     response = await client.get("/api/v1/response/pending")
-    assert response.status_code == 200
-    assert response.json() == []
+    assert response.status_code == 401

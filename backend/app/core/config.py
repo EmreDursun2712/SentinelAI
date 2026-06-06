@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_ttl_minutes: int = 60 * 12
 
+    # Bootstrap admin — created once on startup if both are set. If either is
+    # missing, NO default user is created (no hardcoded credentials ever ship).
+    bootstrap_admin_username: str | None = None
+    bootstrap_admin_password: str | None = None
+
     cors_origins: str = "http://localhost:5173"
 
     ml_artifacts_dir: str = "/app/ml_artifacts"
@@ -46,6 +51,15 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def is_production(self) -> bool:
+        return self.env.lower() in {"production", "prod", "staging"}
+
+    @property
+    def jwt_secret_is_default(self) -> bool:
+        """True if the JWT secret is still the shipped placeholder."""
+        return self.jwt_secret == "dev-jwt-secret-change-me"
 
 
 @lru_cache

@@ -95,18 +95,46 @@ else
 fi
 
 # ---------- 6. wait for model to be loaded ----------
+#
+# /detection/model is now auth-protected (VIEWER+), so we log in with the
+# bootstrap admin first. Credentials come from the environment or, failing that,
+# from the .env created in step 1 (BACKEND_BOOTSTRAP_ADMIN_*).
 
 step "6. Wait for detection model to register"
-attempts=0
-until curl -fsS "${BASE}/api/v1/detection/model" 2>/dev/null \
-        | grep -q '"loaded": true\|"loaded":true'; do
-    attempts=$((attempts + 1))
-    if [[ "${attempts}" -gt 30 ]]; then
-        fail "model never reported loaded — check: curl ${BASE}/api/v1/detection/model"
-    fi
-    sleep 2
-done
-ok "model registered with the backend"
+
+ADMIN_USER="${SENTINELAI_USERNAME:-${BACKEND_BOOTSTRAP_ADMIN_USERNAME:-}}"
+ADMIN_PASS="${SENTINELAI_PASSWORD:-${BACKEND_BOOTSTRAP_ADMIN_PASSWORD:-}}"
+if [[ -f .env ]]; then
+    [[ -n "${ADMIN_USER}" ]] || ADMIN_USER=$(grep -E '^BACKEND_BOOTSTRAP_ADMIN_USERNAME=' .env | tail -1 | cut -d= -f2-)
+    [[ -n "${ADMIN_PASS}" ]] || ADMIN_PASS=$(grep -E '^BACKEND_BOOTSTRAP_ADMIN_PASSWORD=' .env | tail -1 | cut -d= -f2-)
+fi
+
+if [[ -z "${ADMIN_USER}" || -z "${ADMIN_PASS}" ]]; then
+    note "no bootstrap admin creds — skipping model-loaded check (backend is healthy)"
+    note "set BACKEND_BOOTSTRAP_ADMIN_USERNAME/PASSWORD in .env to enable it"
+else
+    # Log in (retry briefly in case the admin row is still being created).
+    TOKEN=""
+    for _ in $(seq 1 15); do
+        TOKEN=$(curl -fsS -X POST -H 'Content-Type: application/json' \
+            -d "{\"username\":\"${ADMIN_USER}\",\"password\":\"${ADMIN_PASS}\"}" \
+            "${BASE}/api/v1/auth/login" 2>/dev/null | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4 || true)
+        [[ -n "${TOKEN}" ]] && break
+        sleep 2
+    done
+    [[ -n "${TOKEN}" ]] || fail "could not log in as '${ADMIN_USER}' — check the bootstrap admin password"
+
+    attempts=0
+    until curl -fsS -H "Authorization: Bearer ${TOKEN}" "${BASE}/api/v1/detection/model" 2>/dev/null \
+            | grep -q '"loaded": true\|"loaded":true'; do
+        attempts=$((attempts + 1))
+        if [[ "${attempts}" -gt 30 ]]; then
+            fail "model never reported loaded — check: curl -H 'Authorization: Bearer …' ${BASE}/api/v1/detection/model"
+        fi
+        sleep 2
+    done
+    ok "model registered with the backend"
+fi
 
 # ---------- done ----------
 

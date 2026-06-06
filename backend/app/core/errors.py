@@ -50,6 +50,11 @@ class UnauthorizedError(AppError):
     status_code = status.HTTP_401_UNAUTHORIZED
 
 
+class ForbiddenError(AppError):
+    code = "forbidden"
+    status_code = status.HTTP_403_FORBIDDEN
+
+
 def _request_id(request: Request) -> str | None:
     return getattr(request.state, "request_id", None)
 

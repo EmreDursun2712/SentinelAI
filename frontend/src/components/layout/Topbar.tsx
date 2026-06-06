@@ -1,8 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { ConnectionPill } from "@/components/ConnectionPill";
+import { Button } from "@/components/ui/Button";
 import { healthApi } from "@/lib/api";
+import { useAuth } from "@/lib/auth/AuthContext";
 
 const TITLES: Record<string, string> = {
   "/": "Dashboard",
@@ -21,6 +23,13 @@ export function Topbar() {
   const { pathname } = useLocation();
   const path = pathname;
   const title = activeTitle(path);
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  async function handleLogout() {
+    await logout();
+    navigate("/login", { replace: true });
+  }
 
   const healthQ = useQuery({
     queryKey: ["topbar", "health"],
@@ -53,6 +62,20 @@ export function Topbar() {
           label="Database"
           value={readyQ.data?.db ?? (readyQ.isError ? "down" : "…")}
         />
+
+        {user && (
+          <div className="ml-2 flex items-center gap-2 border-l border-slate-800 pl-3">
+            <div className="text-right leading-tight">
+              <p className="text-xs font-medium text-slate-200">{user.username}</p>
+              <p className="text-[10px] uppercase tracking-wider text-slate-500">
+                {user.role}
+              </p>
+            </div>
+            <Button size="sm" variant="ghost" onClick={handleLogout}>
+              Sign out
+            </Button>
+          </div>
+        )}
       </div>
     </header>
   );

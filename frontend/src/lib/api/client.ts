@@ -1,6 +1,8 @@
 // Low-level fetch client used by every resource module under lib/api/.
 // All resource calls go through `request` so the error envelope, base URL,
-// and JSON parsing live in one place.
+// JSON parsing, the Bearer header, and 401 handling live in one place.
+
+import { clearToken, getToken, notifyUnauthorized } from "@/lib/auth/token";
 
 export const API_BASE: string =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
@@ -24,10 +26,12 @@ type RequestInitWithBody = Omit<RequestInit, "body"> & { body?: unknown };
 async function _fetch(url: string, init: RequestInitWithBody = {}): Promise<Response> {
   const { body, headers, ...rest } = init;
   const hasJsonBody = body !== undefined && body !== null && !(body instanceof FormData);
+  const token = getToken();
   return fetch(url, {
     ...rest,
     headers: {
       ...(hasJsonBody ? { "Content-Type": "application/json" } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...headers,
     },
     body:
@@ -58,6 +62,13 @@ export async function request<T>(
   const requestId = response.headers.get("x-request-id") ?? undefined;
   const parsed = await _parse(response);
   if (!response.ok) {
+    // A 401 means our token is missing/expired/invalid: drop it and let the
+    // AuthProvider redirect to /login. (403 = authenticated but not allowed —
+    // we keep the session and surface the error to the caller as usual.)
+    if (response.status === 401) {
+      clearToken();
+      notifyUnauthorized();
+    }
     throw new ApiError(response.status, parsed, requestId);
   }
   return parsed as T;

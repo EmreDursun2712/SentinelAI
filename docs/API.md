@@ -8,8 +8,54 @@ The machine-readable schema is at `/api/v1/openapi.json`.
 
 - JSON in, JSON out. All bodies are UTF-8 JSON.
 - Every response carries an `X-Request-ID` header. If the client sends one, it is preserved.
-- All write endpoints will be guarded by the `X-API-Key` header once Phase 1 lands. Phase 0 stubs
-  are open so the frontend can render.
+- **Every `/api/v1` endpoint requires a JWT** (`Authorization: Bearer <token>`), except
+  `POST /api/v1/auth/login`. `/health`, `/readyz`, `/docs`, `/redoc`, and
+  `/api/v1/openapi.json` stay public. See [Authentication & roles](#authentication--roles).
+
+## Authentication & roles
+
+Obtain a token from `POST /api/v1/auth/login`, then send it as a Bearer header on every
+request. Authorization is **method-based RBAC**: reads need `VIEWER`+, mutations need
+`ANALYST`+, and a few endpoints require `ADMIN`. Roles are ranked `VIEWER < ANALYST < ADMIN`,
+so a higher role satisfies any lower requirement.
+
+| Method | Path                    | Role    | Purpose                                          |
+| ------ | ----------------------- | ------- | ------------------------------------------------ |
+| POST   | `/api/v1/auth/login`    | public  | Exchange username/password for a JWT             |
+| GET    | `/api/v1/auth/me`       | any     | Current identity (decoded from the token)        |
+| POST   | `/api/v1/auth/logout`   | any     | Stateless no-op; client discards its token       |
+| POST   | `/api/v1/auth/users`    | ADMIN   | Create a user `{username, password, role}`       |
+
+```bash
+# 1. Log in
+TOKEN=$(curl -fsS localhost:8000/api/v1/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"username":"admin","password":"<your-admin-pw>"}' | jq -r .access_token)
+
+# 2. Call protected endpoints
+curl -fsS localhost:8000/api/v1/alerts -H "Authorization: Bearer $TOKEN"
+```
+
+Role policy by endpoint family:
+
+| Family                                                       | Read (GET) | Mutate (POST) |
+| ------------------------------------------------------------ | ---------- | ------------- |
+| alerts, response, reports, ingestion, detection, dashboard  | VIEWER+    | ANALYST+      |
+
+A `VIEWER` calling a mutation gets **403**; a request with no/invalid token gets **401**.
+
+### Bootstrap admin
+
+The first admin is created on startup from env vars — never hardcoded. Set **both**
+`SENTINEL_BOOTSTRAP_ADMIN_USERNAME` and `SENTINEL_BOOTSTRAP_ADMIN_PASSWORD` (or the
+`BACKEND_BOOTSTRAP_ADMIN_*` Compose vars). If either is unset, no user is created. The
+bootstrap is create-only: it never overwrites an existing user's password. Additional users
+are created via `POST /api/v1/auth/users` (ADMIN only).
+
+> **Secret rotation:** `SENTINEL_JWT_SECRET` and `SENTINEL_API_KEY` ship as `change-me`
+> placeholders for the classroom demo. Rotate them (and the bootstrap admin password) before
+> any shared/exposed deployment — the backend refuses to start in a production-like
+> `SENTINEL_ENV` while `JWT_SECRET` is still the default.
 
 ## Error envelope
 

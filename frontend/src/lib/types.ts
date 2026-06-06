@@ -1,6 +1,22 @@
 // Mirrors backend Pydantic schemas. Kept in sync by hand for the course project;
 // can be replaced by an OpenAPI codegen step later.
 
+// ----- Auth ---------------------------------------------------------------
+
+export type Role = "VIEWER" | "ANALYST" | "ADMIN";
+
+export interface AuthUser {
+  username: string;
+  role: Role;
+}
+
+export interface LoginResponse {
+  access_token: string;
+  token_type: string;
+  expires_at: string;
+  user: AuthUser;
+}
+
 // ----- Enums --------------------------------------------------------------
 
 export type Severity = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";

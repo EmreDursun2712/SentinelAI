@@ -45,12 +45,23 @@ All settings are read from `SENTINEL_*` environment variables (or a local `.env`
 | `SENTINEL_ENV`               | `development`                                                        | Free-form environment label      |
 | `SENTINEL_LOG_LEVEL`         | `info`                                                               | structlog level                  |
 | `SENTINEL_DATABASE_URL`      | `postgresql+psycopg://sentinelai:sentinelai@localhost:5432/sentinelai` | SQLAlchemy URL                   |
-| `SENTINEL_API_KEY`           | `dev-api-key-change-me`                                              | API-key gate for write endpoints |
-| `SENTINEL_JWT_SECRET`        | `dev-jwt-secret-change-me`                                           | JWT signing secret               |
+| `SENTINEL_API_KEY`           | `dev-api-key-change-me`                                              | API-key for service-to-service calls |
+| `SENTINEL_JWT_SECRET`        | `dev-jwt-secret-change-me`                                           | JWT signing secret (rotate in prod) |
 | `SENTINEL_JWT_ALGORITHM`     | `HS256`                                                              | JWT algorithm                    |
 | `SENTINEL_JWT_TTL_MINUTES`   | `720`                                                                | Token lifetime                   |
+| `SENTINEL_BOOTSTRAP_ADMIN_USERNAME` | _(unset)_                                                     | If set with the password, creates an ADMIN once on startup |
+| `SENTINEL_BOOTSTRAP_ADMIN_PASSWORD` | _(unset)_                                                     | Bootstrap admin password (create-only, never overwrites)   |
 | `SENTINEL_CORS_ORIGINS`      | `http://localhost:5173`                                              | Comma-separated allowlist        |
 | `SENTINEL_ML_ARTIFACTS_DIR`  | `/app/ml_artifacts`                                                  | Where the model file is loaded   |
+
+### Authentication
+
+Every `/api/v1` route requires a JWT (`Authorization: Bearer <token>`) except
+`POST /api/v1/auth/login`; `/health`, `/readyz`, `/docs`, and the OpenAPI schema stay public.
+Authorization is method-based RBAC — reads need `VIEWER`+, mutations need `ANALYST`+, user
+management needs `ADMIN`. Bootstrap the first admin with the two `BOOTSTRAP_ADMIN` vars above;
+no default user is ever created. See [docs/API.md](../docs/API.md#authentication--roles) for
+the full flow.
 
 ## Health probes
 

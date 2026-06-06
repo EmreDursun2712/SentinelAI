@@ -13,10 +13,9 @@ import { Select } from "@/components/ui/Select";
 import { Spinner } from "@/components/ui/Spinner";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@/components/ui/Table";
 import { dashboardApi, responseApi } from "@/lib/api";
+import { useAuth } from "@/lib/auth/AuthContext";
 import { formatRelative } from "@/lib/format";
 import type { ResponseActionOut, ResponseActionType, ResponseStatus } from "@/lib/types";
-
-const ANALYST_ID = "ui-analyst";
 
 const ACTION_TYPES: ResponseActionType[] = [
   "BLOCK_IP",
@@ -44,6 +43,8 @@ function statusTone(s: ResponseStatus): "info" | "success" | "warning" | "neutra
 
 export default function ResponseCenterPage() {
   const qc = useQueryClient();
+  const { user } = useAuth();
+  const analystId = user?.username;
   const [actionFilter, setActionFilter] = useState<ResponseActionType | "">("");
 
   const overviewQ = useQuery({
@@ -75,7 +76,7 @@ export default function ResponseCenterPage() {
 
   const approve = useMutation({
     mutationFn: (id: number) =>
-      responseApi.approveResponseAction(id, { analyst_id: ANALYST_ID }),
+      responseApi.approveResponseAction(id, { analyst_id: analystId }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["response"] });
       qc.invalidateQueries({ queryKey: ["alert"] });
@@ -85,7 +86,7 @@ export default function ResponseCenterPage() {
   const reject = useMutation({
     mutationFn: ({ id, reason }: { id: number; reason: string }) =>
       responseApi.rejectResponseAction(id, {
-        analyst_id: ANALYST_ID,
+        analyst_id: analystId,
         reason,
       }),
     onSuccess: () => {

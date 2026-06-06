@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@/components/ui/Table";
 import { responseApi } from "@/lib/api";
+import { useAuth } from "@/lib/auth/AuthContext";
 import type { ResponseActionOut } from "@/lib/types";
 
 interface ResponseActionsTableProps {
@@ -14,17 +15,17 @@ interface ResponseActionsTableProps {
   actions: ResponseActionOut[];
 }
 
-const ANALYST_ID = "ui-analyst";
-
 export function ResponseActionsTable({
   alertId,
   actions,
 }: ResponseActionsTableProps) {
   const qc = useQueryClient();
+  const { user } = useAuth();
+  const analystId = user?.username;
 
   const approveMut = useMutation({
     mutationFn: (id: number) =>
-      responseApi.approveResponseAction(id, { analyst_id: ANALYST_ID }),
+      responseApi.approveResponseAction(id, { analyst_id: analystId }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["alert", alertId] });
       qc.invalidateQueries({ queryKey: ["response"] });
@@ -33,7 +34,7 @@ export function ResponseActionsTable({
   const rejectMut = useMutation({
     mutationFn: ({ id, reason }: { id: number; reason: string }) =>
       responseApi.rejectResponseAction(id, {
-        analyst_id: ANALYST_ID,
+        analyst_id: analystId,
         reason,
       }),
     onSuccess: () => {

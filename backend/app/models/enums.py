@@ -3,6 +3,35 @@
 from __future__ import annotations
 
 import enum
+from typing import Final
+
+
+class Role(str, enum.Enum):
+    """RBAC roles, lowest to highest privilege.
+
+    The workflow is read-only for VIEWER, full SOC operation for ANALYST, and
+    user management plus future dangerous actions for ADMIN. Privilege is a
+    total order (see ``ROLE_RANK``): a higher role satisfies any requirement a
+    lower role does.
+    """
+
+    VIEWER = "VIEWER"
+    ANALYST = "ANALYST"
+    ADMIN = "ADMIN"
+
+
+# Numeric rank so "at least ANALYST" is a simple comparison. Kept next to the
+# enum so the two never drift apart.
+ROLE_RANK: Final[dict[Role, int]] = {
+    Role.VIEWER: 1,
+    Role.ANALYST: 2,
+    Role.ADMIN: 3,
+}
+
+
+def role_satisfies(actual: Role, minimum: Role) -> bool:
+    """True if ``actual`` is at least as privileged as ``minimum``."""
+    return ROLE_RANK[actual] >= ROLE_RANK[minimum]
 
 
 class IngestionKind(str, enum.Enum):

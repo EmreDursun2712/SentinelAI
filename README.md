@@ -151,14 +151,35 @@ python -m ml.train --synthetic 50000
 
 ---
 
+## Authentication
+
+Every `/api/v1` endpoint requires a JWT except `POST /api/v1/auth/login`
+(`/health`, `/readyz`, `/docs`, and the OpenAPI schema stay public). Authorization
+is method-based RBAC: reads need **VIEWER**+, mutations need **ANALYST**+, and user
+management needs **ADMIN** (`VIEWER < ANALYST < ADMIN`).
+
+Create the first admin on startup by setting **both** env vars (no default user is
+ever created):
+
+```bash
+# in .env (Compose) — or SENTINEL_BOOTSTRAP_ADMIN_* for a local backend run
+BACKEND_BOOTSTRAP_ADMIN_USERNAME=admin
+BACKEND_BOOTSTRAP_ADMIN_PASSWORD=<a-strong-password>
+```
+
+Then open <http://localhost:5173>, sign in, and operate the dashboard. Additional
+users are created by an admin via `POST /api/v1/auth/users`. Full flow and curl
+examples: [docs/API.md](docs/API.md#authentication--roles).
+
 ## Environment variables
 
 Copy `.env.example` at each level (`./`, `backend/`, `frontend/`) and adjust
 as needed. The root `.env` is consumed by Docker Compose; the per-service
 files are used during local non-Docker runs. The defaults in `.env.example`
 are safe for classroom demos but **must be rotated before any exposed
-deployment** — `BACKEND_API_KEY` and `BACKEND_JWT_SECRET` ship as
-`change-me` placeholders by design.
+deployment** — `BACKEND_API_KEY`, `BACKEND_JWT_SECRET`, and the bootstrap admin
+password ship as `change-me` placeholders by design. The backend refuses to
+start in a production-like `SENTINEL_ENV` while `JWT_SECRET` is still the default.
 
 ---
 

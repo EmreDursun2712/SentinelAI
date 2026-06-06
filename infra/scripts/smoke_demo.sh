@@ -22,6 +22,12 @@ set -euo pipefail
 BASE="${SENTINELAI_BASE_URL:-http://localhost:8000}"
 API="$BASE/api/v1"
 
+# Credentials for the protected API. Default to the bootstrap admin; override
+# with SENTINELAI_USERNAME / SENTINELAI_PASSWORD. The password has no default —
+# set it (or BACKEND_BOOTSTRAP_ADMIN_PASSWORD) so the smoke test can log in.
+SMOKE_USER="${SENTINELAI_USERNAME:-admin}"
+SMOKE_PASS="${SENTINELAI_PASSWORD:-${BACKEND_BOOTSTRAP_ADMIN_PASSWORD:-}}"
+
 # ---------- output helpers ----------
 
 if [[ -t 1 ]]; then
@@ -66,10 +72,27 @@ DB_STATUS=$(echo "$READYZ" | jq -r '.db')
     || fail "database not ready (db=$DB_STATUS)"
 ok "database is ready"
 
+# ---------- 1b. authenticate ----------
+
+step "1b. Authenticate"
+[[ -n "$SMOKE_PASS" ]] \
+    || fail "no password set — export SENTINELAI_PASSWORD (or BACKEND_BOOTSTRAP_ADMIN_PASSWORD) for user '$SMOKE_USER'"
+LOGIN=$(curl -sf -X POST -H 'Content-Type: application/json' \
+    -d "$(jq -nc --arg u "$SMOKE_USER" --arg p "$SMOKE_PASS" '{username:$u,password:$p}')" \
+    "$API/auth/login") \
+    || fail "login failed for '$SMOKE_USER' — is the bootstrap admin created?"
+TOKEN=$(echo "$LOGIN" | jq -r '.access_token')
+[[ -n "$TOKEN" && "$TOKEN" != "null" ]] \
+    || fail "login returned no access_token"
+# Reusable auth header for every protected /api/v1 call below.
+AUTHZ=(-H "Authorization: Bearer $TOKEN")
+ROLE=$(echo "$LOGIN" | jq -r '.user.role')
+ok "authenticated as '$SMOKE_USER' (role=$ROLE)"
+
 # ---------- 2. detection model loaded ----------
 
 step "2. Detection model loaded"
-MODEL=$(curl -sf "$API/detection/model")
+MODEL=$(curl -sf "${AUTHZ[@]}" "$API/detection/model")
 LOADED=$(echo "$MODEL" | jq -r '.loaded')
 [[ "$LOADED" == "true" ]] \
     || fail "detection model not loaded — run: python -m ml.train --synthetic 50000 && docker compose restart backend"
@@ -81,7 +104,7 @@ note "$(echo "$MODEL" | jq -r '.classes | join(" · ")')"
 # ---------- 3. ingest the bundled sample CSV ----------
 
 step "3. Ingest bundled sample CSV"
-INGEST=$(curl -sf -X POST -H 'Content-Type: application/json' \
+INGEST=$(curl -sf -X POST "${AUTHZ[@]}" -H 'Content-Type: application/json' \
     -d '{"file":"samples/sample_flows.csv","rate":50}' \
     "$API/ingest/replay")
 JOB_ID=$(echo "$INGEST" | jq -r '.job_id')
@@ -95,7 +118,7 @@ ok "ingested job #$JOB_ID: $VALID valid / $INVALID invalid / $TOTAL total"
 # ---------- 4. run detection on the freshly-ingested events ----------
 
 step "4. Run detection (auto-triage + auto-respond inline)"
-DETECT=$(curl -sf -X POST -H 'Content-Type: application/json' \
+DETECT=$(curl -sf -X POST "${AUTHZ[@]}" -H 'Content-Type: application/json' \
     -d '{"limit":5000}' \
     "$API/detection/run")
 PROCESSED=$(echo "$DETECT" | jq -r '.processed')
@@ -109,7 +132,7 @@ note "by label: $(echo "$DETECT" | jq -cr '.by_label')"
 # ---------- 5. dashboard overview reflects the new state ----------
 
 step "5. Dashboard overview"
-OV=$(curl -sf "$API/dashboard/overview")
+OV=$(curl -sf "${AUTHZ[@]}" "$API/dashboard/overview")
 TOTAL_EVENTS=$(echo "$OV" | jq -r '.total_events')
 TOTAL_ALERTS=$(echo "$OV" | jq -r '.alerts.total')
 PENDING=$(echo "$OV" | jq -r '.pending_actions')
@@ -120,12 +143,12 @@ note "by_severity: $(echo "$OV" | jq -cr '.alerts.by_severity')"
 
 step "6. Pick an alert and investigate"
 # Prefer HIGH/CRITICAL, fall back to whatever exists.
-ALERT_ID=$(curl -sf "$API/alerts?sort=priority&limit=1" | jq -r '.[0].id // empty')
+ALERT_ID=$(curl -sf "${AUTHZ[@]}" "$API/alerts?sort=priority&limit=1" | jq -r '.[0].id // empty')
 [[ -n "$ALERT_ID" ]] \
     || fail "no alerts available — detection produced $ALERTS_CREATED alerts"
 ok "picked alert #$ALERT_ID"
 
-INV=$(curl -sf -X POST -H 'Content-Type: application/json' -d '{}' \
+INV=$(curl -sf -X POST "${AUTHZ[@]}" -H 'Content-Type: application/json' -d '{}' \
     "$API/alerts/$ALERT_ID/investigate")
 INV_SUMMARY=$(echo "$INV" | jq -r '.packet.summary' | head -c 100)
 INV_RELATED=$(echo "$INV" | jq -r '.packet.statistics.related_alert_count')
@@ -135,7 +158,7 @@ note "summary: ${INV_SUMMARY}..."
 # ---------- 7. mark a disposition ----------
 
 step "7. Analyst disposition: CONFIRMED"
-curl -sf -X POST -H 'Content-Type: application/json' \
+curl -sf -X POST "${AUTHZ[@]}" -H 'Content-Type: application/json' \
     -d '{"disposition":"CONFIRMED","analyst_id":"smoke-test","note":"automated smoke test"}' \
     "$API/alerts/$ALERT_ID/disposition" >/dev/null
 ok "alert #$ALERT_ID disposition = CONFIRMED"
@@ -143,9 +166,9 @@ ok "alert #$ALERT_ID disposition = CONFIRMED"
 # ---------- 8. approve one pending response action (if any) ----------
 
 step "8. Approve a pending response action (if any)"
-PENDING_ID=$(curl -sf "$API/response/pending?limit=1" | jq -r '.[0].id // empty')
+PENDING_ID=$(curl -sf "${AUTHZ[@]}" "$API/response/pending?limit=1" | jq -r '.[0].id // empty')
 if [[ -n "$PENDING_ID" ]]; then
-    curl -sf -X POST -H 'Content-Type: application/json' \
+    curl -sf -X POST "${AUTHZ[@]}" -H 'Content-Type: application/json' \
         -d '{"analyst_id":"smoke-test","note":"smoke approval"}' \
         "$API/response/$PENDING_ID/approve" >/dev/null
     ok "approved response action #$PENDING_ID"
@@ -156,7 +179,7 @@ fi
 # ---------- 9. generate a per-alert report ----------
 
 step "9. Generate per-alert report"
-REPORT=$(curl -sf -X POST -H 'Content-Type: application/json' -d '{}' \
+REPORT=$(curl -sf -X POST "${AUTHZ[@]}" -H 'Content-Type: application/json' -d '{}' \
     "$API/alerts/$ALERT_ID/report")
 REPORT_ID=$(echo "$REPORT" | jq -r '.report_id')
 TITLE=$(echo "$REPORT" | jq -r '.packet.title')
@@ -166,7 +189,7 @@ ok "report #$REPORT_ID: $TITLE ($MD_BYTES bytes of markdown)"
 # ---------- 10. daily summary ----------
 
 step "10. Generate daily summary"
-DAILY=$(curl -sf -X POST -H 'Content-Type: application/json' -d '{}' \
+DAILY=$(curl -sf -X POST "${AUTHZ[@]}" -H 'Content-Type: application/json' -d '{}' \
     "$API/reports/daily/run")
 DAILY_ID=$(echo "$DAILY" | jq -r '.report_id')
 DAILY_ALERTS=$(echo "$DAILY" | jq -r '.packet.total_alerts')
@@ -175,7 +198,7 @@ ok "daily summary #$DAILY_ID — $DAILY_ALERTS alert(s) covered"
 # ---------- 11. audit trail sanity ----------
 
 step "11. Audit trail on alert #$ALERT_ID"
-ALERT_DETAIL=$(curl -sf "$API/alerts/$ALERT_ID")
+ALERT_DETAIL=$(curl -sf "${AUTHZ[@]}" "$API/alerts/$ALERT_ID")
 N_DECISIONS=$(echo "$ALERT_DETAIL" | jq -r '.decisions | length')
 N_ACTIONS=$(echo "$ALERT_DETAIL" | jq -r '.actions | length')
 AGENTS=$(echo "$ALERT_DETAIL" | jq -r '[.decisions[].agent] | unique | join(", ")')

@@ -2,20 +2,32 @@
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
-from app.api.routers import alerts, dashboard, detection, health, ingest, reports, response, stream
+from app.api.deps import enforce_rbac
+from app.api.routers import (
+    alerts,
+    auth,
+    dashboard,
+    detection,
+    health,
+    ingest,
+    reports,
+    response,
+    stream,
+)
 from app.core.config import get_settings
-from app.core.db import dispose_engine, init_engine
+from app.core.db import dispose_engine, get_session, init_engine
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging, get_logger
 from app.core.middleware import RequestIdMiddleware
 from app.services.model_registry import get_model_registry
+from app.services.user_service import ensure_bootstrap_admin
 
 logger = get_logger(__name__)
 
@@ -27,6 +39,14 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     configure_logging(settings.log_level)
     init_engine(settings.database_url)
+
+    # Refuse to run with the placeholder JWT secret in a production-like env —
+    # signing tokens with a public default would let anyone mint admin tokens.
+    if settings.is_production and settings.jwt_secret_is_default:
+        raise RuntimeError(
+            "SENTINEL_JWT_SECRET is still the shipped default. Set a strong "
+            "secret before running in a production-like environment."
+        )
 
     # Best-effort model load. The backend stays serviceable without a model;
     # detection endpoints return a clear error and operators can stage an
@@ -43,6 +63,25 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
             "model.load_failed",
             artifacts_dir=settings.ml_artifacts_dir,
         )
+
+    # Idempotent bootstrap admin. Only runs when BOTH env vars are set; never
+    # creates a hardcoded default account. Best-effort: a transient DB error
+    # here must not block startup (migrations may still be settling).
+    if settings.bootstrap_admin_username and settings.bootstrap_admin_password:
+        try:
+            async for session in get_session():
+                created = await ensure_bootstrap_admin(
+                    session,
+                    username=settings.bootstrap_admin_username,
+                    password=settings.bootstrap_admin_password,
+                )
+                logger.info(
+                    "auth.bootstrap_admin",
+                    username=settings.bootstrap_admin_username,
+                    created=created is not None,
+                )
+        except Exception:
+            logger.exception("auth.bootstrap_admin_failed")
 
     logger.info("backend.startup", env=settings.env, version=__version__)
     try:
@@ -80,14 +119,35 @@ def create_app() -> FastAPI:
     register_error_handlers(app)
 
     # Health probes live at the root — orchestrators expect them there.
+    # These stay public, as do /docs, /redoc, and the OpenAPI schema.
     app.include_router(health.router, tags=["health"])
 
-    app.include_router(alerts.router, prefix=API_V1_PREFIX, tags=["alerts"])
-    app.include_router(response.router, prefix=API_V1_PREFIX, tags=["response"])
-    app.include_router(reports.router, prefix=API_V1_PREFIX, tags=["reports"])
-    app.include_router(ingest.router, prefix=API_V1_PREFIX, tags=["ingestion"])
-    app.include_router(detection.router, prefix=API_V1_PREFIX, tags=["detection"])
-    app.include_router(dashboard.router, prefix=API_V1_PREFIX, tags=["dashboard"])
+    # Auth is public at /login; /me, /logout, /users self-guard internally.
+    app.include_router(auth.router, prefix=API_V1_PREFIX, tags=["auth"])
+
+    # Every functional API router is behind method-based RBAC:
+    #   GET/HEAD/OPTIONS → VIEWER+,  mutations → ANALYST+,  (ADMIN satisfies both).
+    protected = [Depends(enforce_rbac)]
+    app.include_router(
+        alerts.router, prefix=API_V1_PREFIX, tags=["alerts"], dependencies=protected
+    )
+    app.include_router(
+        response.router, prefix=API_V1_PREFIX, tags=["response"], dependencies=protected
+    )
+    app.include_router(
+        reports.router, prefix=API_V1_PREFIX, tags=["reports"], dependencies=protected
+    )
+    app.include_router(
+        ingest.router, prefix=API_V1_PREFIX, tags=["ingestion"], dependencies=protected
+    )
+    app.include_router(
+        detection.router, prefix=API_V1_PREFIX, tags=["detection"], dependencies=protected
+    )
+    app.include_router(
+        dashboard.router, prefix=API_V1_PREFIX, tags=["dashboard"], dependencies=protected
+    )
+    # NOTE: the WebSocket /stream is an echo stub today and is secured in the
+    # WebSocket-broadcasting etap (token via query param). It carries no data.
     app.include_router(stream.router, prefix=API_V1_PREFIX, tags=["stream"])
 
     return app

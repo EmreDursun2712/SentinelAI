@@ -18,6 +18,7 @@ from app.models.enums import (
     IngestionStatus,
     ResponseActionType,
     ResponseStatus,
+    Role,
     Severity,
 )
 from app.models.incident_report import IncidentReport
@@ -26,6 +27,7 @@ from app.models.mixins import CreatedAtMixin, TimestampMixin
 from app.models.model_version import ModelVersion
 from app.models.network_event import NetworkEvent
 from app.models.response_action import ResponseAction
+from app.models.user import User
 
 __all__ = [
     "AgentDecision",
@@ -46,6 +48,8 @@ __all__ = [
     "ResponseAction",
     "ResponseActionType",
     "ResponseStatus",
+    "Role",
     "Severity",
     "TimestampMixin",
+    "User",
 ]

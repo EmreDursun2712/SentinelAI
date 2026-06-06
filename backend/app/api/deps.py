@@ -1,15 +1,26 @@
-"""Shared FastAPI dependencies."""
+"""Shared FastAPI dependencies: DB session and JWT authentication / RBAC.
+
+Authentication is **stateless**: ``get_current_user`` validates the bearer token
+and builds an :class:`AuthPrincipal` from its claims, with no per-request DB
+lookup. The ``users`` table is only consulted at login (where the password and
+``is_active`` flag are checked before a token is ever minted). Tokens are
+short-lived (``jwt_ttl_minutes``); a deactivated user keeps access until their
+current token expires — an accepted trade-off for this project's scope.
+"""
 
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from typing import Annotated
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
-from app.core.security import verify_api_key
+from app.core.errors import ForbiddenError, UnauthorizedError
+from app.core.security import decode_access_token, verify_api_key
+from app.models.enums import Role, role_satisfies
 
 
 async def db_session() -> AsyncIterator[AsyncSession]:
@@ -20,7 +31,118 @@ async def db_session() -> AsyncIterator[AsyncSession]:
 SessionDep = Annotated[AsyncSession, Depends(db_session)]
 
 
+# HTTP methods that only read state. Everything else is a mutation.
+_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
+@dataclass(frozen=True)
+class AuthPrincipal:
+    """The authenticated caller, reconstructed from validated JWT claims."""
+
+    username: str
+    role: Role
+
+
+def _bearer_token(authorization: str | None) -> str | None:
+    if not authorization:
+        return None
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        return None
+    return token.strip()
+
+
+async def get_current_user(
+    authorization: Annotated[str | None, Header()] = None,
+) -> AuthPrincipal:
+    """Validate the ``Authorization: Bearer <jwt>`` header and return the caller.
+
+    Raises 401 for a missing, malformed, expired, or wrongly-signed token, or a
+    token whose ``role`` claim is not a known role.
+    """
+    token = _bearer_token(authorization)
+    if token is None:
+        raise UnauthorizedError("Missing or malformed Authorization header.")
+
+    claims = decode_access_token(token)
+    if claims is None:
+        raise UnauthorizedError("Invalid or expired access token.")
+
+    username = claims.get("sub")
+    role_raw = claims.get("role")
+    if not username or not role_raw:
+        raise UnauthorizedError("Token is missing required claims.")
+    try:
+        role = Role(role_raw)
+    except ValueError as exc:
+        raise UnauthorizedError("Token carries an unknown role.") from exc
+
+    return AuthPrincipal(username=str(username), role=role)
+
+
+CurrentUser = Annotated[AuthPrincipal, Depends(get_current_user)]
+
+
+def require_roles(*roles: Role):
+    """Dependency factory: allow only callers whose role is in ``roles``.
+
+    Use the rank-aware ``require_min_role`` for "at least X" policies; this exact
+    membership form is handy for admin-only or analyst-only endpoints.
+    """
+    allowed = frozenset(roles)
+
+    async def _dep(user: CurrentUser) -> AuthPrincipal:
+        if user.role not in allowed:
+            raise ForbiddenError(
+                "Your role is not permitted to perform this action.",
+                details={
+                    "required": [r.value for r in roles],
+                    "actual": user.role.value,
+                },
+            )
+        return user
+
+    return _dep
+
+
+def require_min_role(minimum: Role):
+    """Dependency factory: allow callers whose role is at least ``minimum``."""
+
+    async def _dep(user: CurrentUser) -> AuthPrincipal:
+        if not role_satisfies(user.role, minimum):
+            raise ForbiddenError(
+                "Your role does not have sufficient privilege.",
+                details={"required_min": minimum.value, "actual": user.role.value},
+            )
+        return user
+
+    return _dep
+
+
+# Convenience role guards for per-endpoint use.
+require_admin = require_roles(Role.ADMIN)
+require_analyst = require_min_role(Role.ANALYST)
+require_viewer = require_min_role(Role.VIEWER)
+
+
+async def enforce_rbac(request: Request, user: CurrentUser) -> AuthPrincipal:
+    """Method-based RBAC applied to every protected ``/api/v1`` router.
+
+    Read requests (GET/HEAD/OPTIONS) require VIEWER+; any mutation requires
+    ANALYST+. ADMIN satisfies both. Endpoints needing stricter rules (e.g.
+    admin-only) add their own ``require_*`` dependency on top of this.
+    """
+    minimum = Role.VIEWER if request.method in _SAFE_METHODS else Role.ANALYST
+    if not role_satisfies(user.role, minimum):
+        raise ForbiddenError(
+            "Your role is not permitted to perform this action.",
+            details={"required_min": minimum.value, "actual": user.role.value},
+        )
+    return user
+
+
 async def require_api_key(x_api_key: Annotated[str | None, Header()] = None) -> None:
+    """Service-to-service guard kept for non-interactive callers."""
     if not verify_api_key(x_api_key):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
