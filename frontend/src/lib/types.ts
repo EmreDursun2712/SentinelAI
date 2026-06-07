@@ -111,6 +111,13 @@ export type ResponseActionType =
 
 export type ResponseStatus = "PENDING" | "APPROVED" | "REJECTED" | "EXECUTED";
 
+export type ExecutionMode = "SIMULATED" | "LAB";
+export type RollbackStatus =
+  | "NOT_REQUIRED"
+  | "AVAILABLE"
+  | "ROLLED_BACK"
+  | "FAILED";
+
 export type IngestionKind = "REPLAY" | "STREAM";
 export type IngestionStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
 
@@ -165,6 +172,13 @@ export interface ResponseActionOut {
   rejection_reason: string | null;
   payload: Record<string, unknown>;
   executed_at: string | null;
+  execution_mode: ExecutionMode;
+  executor_name: string | null;
+  external_execution_id: string | null;
+  expires_at: string | null;
+  rollback_status: RollbackStatus;
+  rollback_payload: Record<string, unknown> | null;
+  execution_error: string | null;
   created_at: string;
   updated_at: string;
 }

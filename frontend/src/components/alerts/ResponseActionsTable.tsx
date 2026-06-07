@@ -8,6 +8,13 @@ import { Spinner } from "@/components/ui/Spinner";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@/components/ui/Table";
 import { responseApi } from "@/lib/api";
 import { useAuth } from "@/lib/auth/AuthContext";
+import {
+  LAB_APPROVE_WARNING,
+  canRollback,
+  executionModeLabel,
+  executionModeTone,
+  isRealLabAction,
+} from "@/lib/response";
 import type { ResponseActionOut } from "@/lib/types";
 
 interface ResponseActionsTableProps {
@@ -42,6 +49,27 @@ export function ResponseActionsTable({
       qc.invalidateQueries({ queryKey: ["response"] });
     },
   });
+  const rollbackMut = useMutation({
+    mutationFn: (id: number) =>
+      responseApi.rollbackResponseAction(id, { analyst_id: analystId }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["alert", alertId] });
+      qc.invalidateQueries({ queryKey: ["response"] });
+    },
+  });
+
+  function approveAction(act: ResponseActionOut) {
+    if (!isRealLabAction(act)) {
+      approveMut.mutate(act.id);
+      return;
+    }
+    const reason = window.prompt(
+      `⚠ Real LAB action on ${String(act.payload?.target_ip ?? "the lab")}.\n` +
+        `${LAB_APPROVE_WARNING}\nType a reason to confirm:`,
+      "",
+    );
+    if (reason && reason.trim()) approveMut.mutate(act.id);
+  }
 
   return (
     <Card padding="none">
@@ -49,8 +77,9 @@ export function ResponseActionsTable({
         <div>
           <CardTitle>Response recommendations</CardTitle>
           <CardDescription>
-            All actions are simulated. The database enforces{" "}
-            <span className="font-mono">simulated = TRUE</span>.
+            Simulated by default. A real effect is only possible for{" "}
+            <span className="font-mono">LAB</span> actions; the DB enforces{" "}
+            <span className="font-mono">simulated = TRUE</span> unless mode is LAB.
           </CardDescription>
         </div>
         <Badge tone="neutral">{actions.length} action(s)</Badge>
@@ -64,7 +93,7 @@ export function ResponseActionsTable({
             <Tr>
               <Th>#</Th>
               <Th>Action</Th>
-              <Th>Approval</Th>
+              <Th>Mode</Th>
               <Th>Status</Th>
               <Th>Rationale</Th>
               <Th className="text-right">Decide</Th>
@@ -77,8 +106,8 @@ export function ResponseActionsTable({
                 <Td>
                   <Badge tone="default">{act.action_type}</Badge>
                 </Td>
-                <Td className="text-xs text-slate-400">
-                  {act.approval_required ? "analyst" : "auto"}
+                <Td>
+                  <Badge tone={executionModeTone(act)}>{executionModeLabel(act)}</Badge>
                 </Td>
                 <Td>
                   <Badge
@@ -101,14 +130,14 @@ export function ResponseActionsTable({
                     <div className="flex justify-end gap-2">
                       <Button
                         size="sm"
-                        variant="primary"
+                        variant={isRealLabAction(act) ? "danger" : "primary"}
                         disabled={approveMut.isPending}
-                        onClick={() => approveMut.mutate(act.id)}
+                        onClick={() => approveAction(act)}
                       >
                         {approveMut.isPending && approveMut.variables === act.id && (
                           <Spinner className="h-3 w-3" />
                         )}
-                        Approve
+                        {isRealLabAction(act) ? "Approve (LAB)" : "Approve"}
                       </Button>
                       <Button
                         size="sm"
@@ -126,9 +155,26 @@ export function ResponseActionsTable({
                         Reject
                       </Button>
                     </div>
+                  ) : canRollback(act) ? (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={rollbackMut.isPending}
+                      onClick={() => {
+                        if (window.confirm(`Roll back lab action #${act.id}?`))
+                          rollbackMut.mutate(act.id);
+                      }}
+                    >
+                      {rollbackMut.isPending && rollbackMut.variables === act.id && (
+                        <Spinner className="h-3 w-3" />
+                      )}
+                      Roll back
+                    </Button>
                   ) : (
                     <span className="text-xs text-slate-500">
-                      {act.approved_by ?? (act.executed ? "auto" : "—")}
+                      {act.rollback_status === "ROLLED_BACK"
+                        ? "rolled back"
+                        : (act.approved_by ?? (act.executed ? "auto" : "—"))}
                     </span>
                   )}
                 </Td>

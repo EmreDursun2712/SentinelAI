@@ -1,9 +1,10 @@
 """Response agent — thin wrapper around the response service.
 
-Ethics: every ``ResponseAction`` row created by this agent has
-``simulated=True`` enforced at the DB layer via the ``ck_response_actions_
-simulated_only`` CHECK constraint. There is no code path in the project that
-contacts a real firewall, EDR, or ticketing system.
+Ethics: actions are ``simulated`` by default. The DB CHECK
+``ck_response_actions_simulated_unless_lab`` makes a non-simulated row possible
+ONLY in ``execution_mode='LAB'`` — and LAB is itself disabled unless explicitly,
+safely configured (allowlisted CIDRs, analyst approval). See
+``app.services.response_executors`` and ``docs/LAB_RESPONSE.md``.
 """
 
 from __future__ import annotations
@@ -21,7 +22,9 @@ from app.services.response_service import (
 
 class ResponseAgent(Agent):
     name = "agent.response"
-    simulated_only: bool = True  # hard-coded by policy — do not flip.
+    # Default policy. Real effects require explicit LAB config + analyst
+    # approval and are enforced by the DB constraint, not just this flag.
+    simulated_default: bool = True
 
     def register(self) -> None:
         # The Detection service invokes recommend_for_alert directly; the

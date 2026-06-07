@@ -6,11 +6,16 @@ some are safe enough to auto-execute (notification, ticket creation,
 auto-block on HIGH/CRITICAL), others require analyst sign-off through the
 Response Center.
 
-**Ethics guardrail.** Every `response_actions` row is created with
-`simulated=TRUE`. A `CHECK (simulated = TRUE)` constraint on the table makes
-it impossible to insert a row that says otherwise — even via raw SQL. No code
-path in this project contacts a firewall, EDR, ticketing system, or anything
-outside the container.
+**Ethics guardrail.** Actions are `simulated=TRUE` by default. A mode-aware
+`CHECK (simulated = TRUE OR execution_mode = 'LAB')` constraint
+(`ck_response_actions_simulated_unless_lab`) makes a real (non-simulated) row
+*structurally impossible* outside explicit `LAB` mode — even via raw SQL. In the
+default configuration nothing contacts a firewall, EDR, or ticketing system.
+
+**Lab mode (optional, off by default).** When LAB mode is explicitly enabled and
+scoped to authorized lab CIDRs, in-scope network actions become real,
+**analyst-approved, reversible** lab effects executed through a `ResponseExecutor`
+(mock or nftables). Full design + safety model: [LAB_RESPONSE.md](LAB_RESPONSE.md).
 
 ## Recommendation policy
 

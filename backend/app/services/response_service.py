@@ -5,22 +5,26 @@ Two entry points:
 * ``recommend_for_alert`` — generate + persist recommendations for an alert.
   Auto-execute simulated effects inline; analyst-approval actions stay
   PENDING. Updates alert.status appropriately.
-* ``approve_action`` / ``reject_action`` — analyst feedback paths.
+* ``approve_action`` / ``reject_action`` / ``rollback_action`` — analyst paths.
 
-All ``response_actions`` rows are inserted with ``simulated=TRUE`` (a DB-level
-CHECK constraint enforces this — see migration 0001).
+Execution is routed through a :class:`ResponseExecutor` chosen by the action's
+``execution_mode``. Rows are ``simulated=TRUE`` by default; a non-simulated (real)
+row is only possible in ``LAB`` mode, which the DB CHECK
+``ck_response_actions_simulated_unless_lab`` enforces. LAB mode itself is gated by
+config + analyst approval — see ``app.services.response_executors``.
 """
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
 from enum import Enum
-from ipaddress import IPv4Address, IPv6Address
+from ipaddress import IPv4Address, IPv6Address, ip_address, ip_network
 from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import Settings, get_settings
 from app.core.errors import AppError
 from app.core.events import EventType, publish_event
 from app.core.logging import get_logger
@@ -29,12 +33,52 @@ from app.models.enums import (
     AgentName,
     AlertDisposition,
     AlertStatus,
+    ExecutionMode,
     ResponseActionType,
     ResponseStatus,
+    RollbackStatus,
 )
+from app.services.response_executors import (
+    get_executor,
+)
+from app.services.response_executors.base import NETWORK_ACTIONS
 from app.services.response_rules import recommend_actions
 
 logger = get_logger(__name__)
+
+
+def _target_in_lab_cidrs(ip: str | None, settings: Settings) -> bool:
+    """Non-raising scope check used when deciding an action's execution mode."""
+    if not ip:
+        return False
+    try:
+        addr = ip_address(ip)
+    except ValueError:
+        return False
+    for raw in settings.response_allowed_cidrs_list:
+        net = ip_network(raw.strip(), strict=False)
+        if addr.version == net.version and addr in net:
+            return True
+    return False
+
+
+def _decide_execution_mode(
+    action_type: ResponseActionType, target_ip: str | None, settings: Settings
+) -> tuple[ExecutionMode, bool]:
+    """Return ``(execution_mode, simulated)`` for a new action.
+
+    A network action becomes a real ``LAB`` action only when lab response is
+    fully enabled AND its target is inside an allowed lab CIDR. Everything else
+    — informational actions, out-of-scope targets, default config — stays
+    SIMULATED (simulated=True), so real effects are impossible by default.
+    """
+    if (
+        settings.lab_response_active
+        and action_type in NETWORK_ACTIONS
+        and _target_in_lab_cidrs(target_ip, settings)
+    ):
+        return ExecutionMode.LAB, False
+    return ExecutionMode.SIMULATED, True
 
 
 # Side-effect-bearing action types — used both by inline auto-execute and by
@@ -79,26 +123,38 @@ async def recommend_for_alert(
             await session.commit()
         return []
 
+    settings = get_settings()
     persisted: list[ResponseAction] = []
     has_pending = False
     has_auto_executed = False
 
     for rec in recommendations:
+        target_ip = rec.payload.get("target_ip")
+        mode, simulated = _decide_execution_mode(rec.action_type, target_ip, settings)
+
+        # LAB network actions ALWAYS require analyst approval — they never
+        # auto-execute against a real system, even at HIGH/CRITICAL severity.
+        is_lab_network = mode == ExecutionMode.LAB and rec.action_type in NETWORK_ACTIONS
+        approval_required = True if is_lab_network else (not rec.auto_execute)
+
         action = ResponseAction(
             alert_id=alert.id,
             action_type=rec.action_type,
-            simulated=True,  # DB CHECK enforces this — explicit for clarity
+            execution_mode=mode,
+            simulated=simulated,
             status=ResponseStatus.PENDING,
             executed=False,
-            approval_required=not rec.auto_execute,
+            approval_required=approval_required,
             payload=_jsonable({"rationale": rec.rationale, **rec.payload}),
         )
         session.add(action)
         await session.flush()
         persisted.append(action)
 
-        if rec.auto_execute:
-            _simulate_execute(action, alert)
+        # Auto-execute only safe, non-approval actions. In SIMULATED mode that's
+        # the existing behavior; LAB network actions are excluded above.
+        if not approval_required and rec.auto_execute:
+            await _run_executor(session, action, alert, settings)
             has_auto_executed = True
         else:
             has_pending = True
@@ -137,6 +193,10 @@ async def recommend_for_alert(
     if commit:
         await session.commit()
         await session.refresh(alert)
+        # Refresh so server-side columns (timestamps, defaults) are loaded for
+        # serialization — avoids a lazy-load in the async response path.
+        for a in persisted:
+            await session.refresh(a)
 
     logger.info(
         "response.recommendations_created",
@@ -188,7 +248,10 @@ async def approve_action(
         raise AppError(f"Alert {action.alert_id} not found for action {action.id}.")
 
     action.approved_by = analyst_id
-    _simulate_execute(action, alert)
+    # Routes through the executor for this action's mode (SimulatedExecutor for
+    # SIMULATED; the configured lab executor for LAB). Validation failures (e.g.
+    # target outside the lab CIDRs) raise and leave the action PENDING.
+    await _run_executor(session, action, alert, get_settings())
 
     _append_analyst_decision(
         session,
@@ -271,33 +334,111 @@ async def reject_action(
 # ---------------------------------------------------------------------------
 
 
-def _simulate_execute(action: ResponseAction, alert: Alert) -> None:
-    """Mark the action executed and apply side-effects on the alert.
+async def _run_executor(
+    session: AsyncSession,
+    action: ResponseAction,
+    alert: Alert,
+    settings: Settings,
+) -> None:
+    """Execute ``action`` through the executor for its mode; record the result.
 
-    All "execution" here is simulated — no external system is contacted; we
-    just stamp executed=True, fill executed_at, and update alert disposition
-    when the action type calls for it.
+    Raises ``ExecutorError`` (→ 400) on a refused/failed execution, leaving the
+    action PENDING. Disposition side-effects (suppress/escalate) are applied for
+    the relevant action types regardless of executor — they are alert state, not
+    a network effect.
     """
+    executor = get_executor(settings, action.execution_mode)
+    executor.validate(action, alert)  # may raise ExecutorError
+    result = await executor.execute(action, alert)
+
     now = datetime.now(UTC)
     action.status = ResponseStatus.EXECUTED
     action.executed = True
     action.executed_at = now
+    action.simulated = result.simulated
+    action.executor_name = result.executor_name
+    action.external_execution_id = result.external_execution_id
+    action.expires_at = result.expires_at
+    action.rollback_status = result.rollback_status
+    action.rollback_payload = result.rollback_payload
+    action.execution_error = None
 
+    _apply_disposition_side_effects(action, alert, now)
+
+
+def _apply_disposition_side_effects(
+    action: ResponseAction, alert: Alert, now: datetime
+) -> None:
     target_disposition = _DISPOSITION_SIDE_EFFECTS.get(action.action_type)
-    if target_disposition is not None:
-        # ESCALATE only escalates OPEN alerts; if the analyst already moved
-        # the disposition, respect their choice.
-        if action.action_type == ResponseActionType.ESCALATE:
-            if alert.disposition == AlertDisposition.OPEN:
-                alert.disposition = AlertDisposition.UNDER_REVIEW
-        else:
-            alert.disposition = target_disposition
+    if target_disposition is None:
+        return
+    # ESCALATE only escalates OPEN alerts; respect an analyst's prior choice.
+    if action.action_type == ResponseActionType.ESCALATE:
+        if alert.disposition == AlertDisposition.OPEN:
+            alert.disposition = AlertDisposition.UNDER_REVIEW
+    else:
+        alert.disposition = target_disposition
 
-        # SUPPRESS_ALERT also closes the workflow.
-        if target_disposition == AlertDisposition.FALSE_POSITIVE:
-            alert.status = AlertStatus.CLOSED
-            if alert.closed_at is None:
-                alert.closed_at = now
+    # SUPPRESS_ALERT also closes the workflow.
+    if target_disposition == AlertDisposition.FALSE_POSITIVE:
+        alert.status = AlertStatus.CLOSED
+        if alert.closed_at is None:
+            alert.closed_at = now
+
+
+async def rollback_action(
+    session: AsyncSession,
+    action: ResponseAction,
+    *,
+    analyst_id: str | None = None,
+    note: str | None = None,
+) -> ResponseAction:
+    """Revert an executed LAB action whose effect is still in place."""
+    if action.rollback_status != RollbackStatus.AVAILABLE:
+        raise AppError(
+            f"ResponseAction {action.id} has no rollback available "
+            f"(rollback_status={action.rollback_status.value}).",
+            details={"action_id": action.id, "rollback_status": action.rollback_status.value},
+        )
+
+    alert = await session.get(Alert, action.alert_id)
+    executor = get_executor(get_settings(), action.execution_mode)
+    result = await executor.rollback(action, alert)
+    if result.rolled_back:
+        action.rollback_status = RollbackStatus.ROLLED_BACK
+        action.execution_error = None
+    else:
+        action.rollback_status = RollbackStatus.FAILED
+        action.execution_error = result.error
+
+    _append_analyst_decision(
+        session,
+        alert_id=action.alert_id,
+        action=action,
+        verb="rollback",
+        analyst_id=analyst_id,
+        note=note or result.error,
+    )
+
+    await session.commit()
+    await session.refresh(action)
+
+    await publish_event(
+        EventType.RESPONSE_ACTION_EXECUTED,
+        {
+            "action_id": action.id,
+            "alert_id": action.alert_id,
+            "action_type": action.action_type.value,
+            "rollback_status": action.rollback_status.value,
+        },
+    )
+    logger.info(
+        "response.rolled_back",
+        action_id=action.id,
+        status=action.rollback_status.value,
+        analyst_id=analyst_id,
+    )
+    return action
 
 
 def _append_analyst_decision(

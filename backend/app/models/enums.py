@@ -110,6 +110,24 @@ class ResponseStatus(str, enum.Enum):
     EXECUTED = "EXECUTED"
 
 
+class ExecutionMode(str, enum.Enum):
+    """How a response action is carried out.
+
+    SIMULATED (default) never touches a real system. LAB permits a controlled,
+    allowlisted real effect via a lab executor — disabled unless explicitly
+    configured (see ``app.core.config`` response settings)."""
+
+    SIMULATED = "SIMULATED"
+    LAB = "LAB"
+
+
+class RollbackStatus(str, enum.Enum):
+    NOT_REQUIRED = "NOT_REQUIRED"  # nothing to undo (simulated / informational)
+    AVAILABLE = "AVAILABLE"        # a real lab effect that can be reverted
+    ROLLED_BACK = "ROLLED_BACK"
+    FAILED = "FAILED"
+
+
 class IncidentKind(str, enum.Enum):
     PER_ALERT = "PER_ALERT"
     DAILY_SUMMARY = "DAILY_SUMMARY"

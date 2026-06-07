@@ -67,6 +67,16 @@ class Settings(BaseSettings):
     # Reporting
     reports_dir: str = "data/reports"
 
+    # Response execution. Default is fully simulated; LAB (real, allowlisted)
+    # effects are impossible unless ALL of: enabled=true, mode=lab, a lab
+    # executor, and allowed CIDRs. See ``lab_response_active``.
+    response_mode: str = "simulated"           # simulated | lab
+    response_enabled: bool = False
+    response_executor: str = "simulated"       # simulated | mock_lab | nftables_lab
+    response_allowed_cidrs: str = ""           # required for LAB; comma-separated
+    response_max_block_minutes: int = 60
+    response_require_approval: bool = True
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
@@ -79,6 +89,25 @@ class Settings(BaseSettings):
     def jwt_secret_is_default(self) -> bool:
         """True if the JWT secret is still the shipped placeholder."""
         return self.jwt_secret == "dev-jwt-secret-change-me"
+
+    @property
+    def response_allowed_cidrs_list(self) -> list[str]:
+        return [c.strip() for c in self.response_allowed_cidrs.split(",") if c.strip()]
+
+    @property
+    def lab_response_active(self) -> bool:
+        """True only when real lab response is fully + safely configured.
+
+        Every condition must hold, so the default config can never produce a
+        real effect: must be enabled, mode=lab, a non-simulated lab executor,
+        and at least one allowed CIDR. Anything missing → simulated only.
+        """
+        return (
+            self.response_enabled
+            and self.response_mode.strip().lower() == "lab"
+            and self.response_executor.strip().lower() in {"mock_lab", "nftables_lab"}
+            and bool(self.response_allowed_cidrs_list)
+        )
 
 
 @lru_cache

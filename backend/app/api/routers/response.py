@@ -25,6 +25,7 @@ from app.schemas.response import (
     RecommendResponse,
     RejectRequest,
     ResponseActionOut,
+    RollbackRequest,
 )
 from app.services.response_service import (
     approve_action as svc_approve,
@@ -37,6 +38,9 @@ from app.services.response_service import (
 )
 from app.services.response_service import (
     reject_action as svc_reject,
+)
+from app.services.response_service import (
+    rollback_action as svc_rollback,
 )
 
 router = APIRouter(prefix="/response")
@@ -137,5 +141,26 @@ async def reject_response_action(
         raise NotFoundError(f"ResponseAction {action_id} not found.")
     updated = await svc_reject(
         session, action, reason=request.reason, analyst_id=request.analyst_id
+    )
+    return _to_out(updated)
+
+
+@router.post(
+    "/{action_id}/rollback",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(rate_limit("response"))],
+)
+async def rollback_response_action(
+    session: SessionDep,
+    action_id: int,
+    request: RollbackRequest | None = None,
+) -> ResponseActionOut:
+    """Revert an executed LAB action whose effect is still in place (ANALYST+)."""
+    action = await session.get(ResponseAction, action_id)
+    if action is None:
+        raise NotFoundError(f"ResponseAction {action_id} not found.")
+    req = request or RollbackRequest()
+    updated = await svc_rollback(
+        session, action, analyst_id=req.analyst_id, note=req.note
     )
     return _to_out(updated)

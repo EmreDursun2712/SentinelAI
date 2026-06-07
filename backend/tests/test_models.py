@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from app.core.db import Base
 
-
 EXPECTED_TABLES = {
     "ingestion_jobs",
     "model_versions",
@@ -40,12 +39,14 @@ def test_alerts_has_indexes_for_dashboard_queries() -> None:
         assert required in index_names, f"Missing index {required!r} on alerts"
 
 
-def test_response_actions_enforces_simulated_only() -> None:
+def test_response_actions_enforces_simulated_unless_lab() -> None:
     import app.models  # noqa: F401
 
     actions = Base.metadata.tables["response_actions"]
     check_names = {c.name for c in actions.constraints if c.name}
-    assert "ck_response_actions_simulated_only" in check_names
+    # The guardrail is now mode-aware: non-simulated only allowed in LAB mode.
+    assert "ck_response_actions_simulated_unless_lab" in check_names
+    assert "ck_response_actions_simulated_only" not in check_names
 
 
 def test_alerts_confidence_check_constraint_present() -> None:

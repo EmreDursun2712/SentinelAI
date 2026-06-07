@@ -47,6 +47,16 @@ export function rejectResponseAction(
   });
 }
 
+export function rollbackResponseAction(
+  id: number,
+  body: { analyst_id?: string; note?: string } = {},
+): Promise<ResponseActionOut> {
+  return request<ResponseActionOut>(`/response/${id}/rollback`, {
+    method: "POST",
+    body,
+  });
+}
+
 export function generateRecommendations(alertId: number): Promise<{
   alert_id: number;
   actions: ResponseActionOut[];

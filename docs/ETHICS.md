@@ -5,9 +5,20 @@ or alter infrastructure outside its own container network.
 
 ## Hard rules
 
-1. **Simulated response only.** Every `ResponseAction` row is created with `simulated=True`.
-   `ResponseAgent.simulated_only` is a class-level constant; flipping it is a code change that
-   requires explicit instructor approval.
+1. **Simulated by default; real response is lab-only and gated.** Actions are `simulated=True`
+   unless they are explicit `LAB`-mode actions. The DB CHECK
+   `ck_response_actions_simulated_unless_lab` makes a non-simulated row *structurally impossible*
+   outside LAB mode. A real LAB effect requires **all** of the following — any one missing keeps
+   the action simulated:
+   - `SENTINEL_RESPONSE_ENABLED=true`, `SENTINEL_RESPONSE_MODE=lab`, a lab executor
+     (`mock_lab`/`nftables_lab`), and `SENTINEL_RESPONSE_ALLOWED_CIDRS` set;
+   - the target IP is inside an allowed lab CIDR (out-of-scope targets stay simulated);
+   - **analyst approval** — LAB network actions never auto-execute, even at HIGH/CRITICAL;
+   - a duration within `SENTINEL_RESPONSE_MAX_BLOCK_MINUTES`;
+   - every real action is reversible (`POST /response/{id}/rollback`) and fully audited.
+
+   **No production use.** LAB mode is for an isolated, authorized lab only — never public or
+   external targets. See [LAB_RESPONSE.md](LAB_RESPONSE.md).
 2. **No outbound integrations.** The codebase ships no client for firewalls, EDR agents, ticketing
    systems, paging services, or chat platforms. Notifications stay inside the dashboard.
 3. **No packet capture, no payloads — flow metadata only.** SentinelAI never binds a NIC,

@@ -235,9 +235,11 @@ guide and safety model: [docs/LIVE_SENSOR.md](docs/LIVE_SENSOR.md).
 
 ## Ethics
 
-Every `ResponseAction` row is hard-locked to `simulated = TRUE` by a
-PostgreSQL `CHECK` constraint — the database itself refuses to store any
-row marked otherwise. No code path attempts to contact a real firewall,
-EDR, host agent, or third-party service. The optional live sensor reads flow
+Response actions are **simulated by default**. A PostgreSQL `CHECK`
+(`ck_response_actions_simulated_unless_lab`) makes a real (non-simulated) row
+*structurally impossible* outside explicit `LAB` mode. LAB mode (optional, off by
+default) only permits a controlled, **allowlisted, analyst-approved, reversible**
+effect on an authorized lab network — never production or external targets; see
+[docs/LAB_RESPONSE.md](docs/LAB_RESPONSE.md). The optional live sensor reads flow
 **metadata only** (never payloads), is off by default, and runs only against
 explicitly authorized lab subnets. See [docs/ETHICS.md](docs/ETHICS.md).

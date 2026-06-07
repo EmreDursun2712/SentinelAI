@@ -7,7 +7,12 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.enums import ResponseActionType, ResponseStatus
+from app.models.enums import (
+    ExecutionMode,
+    ResponseActionType,
+    ResponseStatus,
+    RollbackStatus,
+)
 
 
 class ResponseActionOut(BaseModel):
@@ -23,6 +28,14 @@ class ResponseActionOut(BaseModel):
     rejection_reason: str | None
     payload: dict[str, Any]
     executed_at: datetime | None
+    # Lab-response controls.
+    execution_mode: ExecutionMode
+    executor_name: str | None
+    external_execution_id: str | None
+    expires_at: datetime | None
+    rollback_status: RollbackStatus
+    rollback_payload: dict[str, Any] | None
+    execution_error: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -42,3 +55,8 @@ class ApproveRequest(BaseModel):
 class RejectRequest(BaseModel):
     reason: str = Field(..., min_length=1, max_length=2000)
     analyst_id: str | None = Field(default=None, max_length=80)
+
+
+class RollbackRequest(BaseModel):
+    analyst_id: str | None = Field(default=None, max_length=80)
+    note: str | None = Field(default=None, max_length=2000)

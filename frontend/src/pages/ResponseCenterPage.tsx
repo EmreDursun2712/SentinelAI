@@ -15,6 +15,13 @@ import { Table, Tbody, Td, Th, Thead, Tr } from "@/components/ui/Table";
 import { dashboardApi, responseApi } from "@/lib/api";
 import { errorMessage } from "@/lib/api/errors";
 import { useAuth } from "@/lib/auth/AuthContext";
+import {
+  LAB_APPROVE_WARNING,
+  canRollback,
+  executionModeLabel,
+  executionModeTone,
+  isRealLabAction,
+} from "@/lib/response";
 import { useLiveInterval } from "@/lib/stream/StreamProvider";
 import { formatRelative } from "@/lib/format";
 import type { ResponseActionOut, ResponseActionType, ResponseStatus } from "@/lib/types";
@@ -77,8 +84,17 @@ export default function ResponseCenterPage() {
   });
 
   const approve = useMutation({
+    mutationFn: ({ id, note }: { id: number; note?: string }) =>
+      responseApi.approveResponseAction(id, { analyst_id: analystId, note }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["response"] });
+      qc.invalidateQueries({ queryKey: ["alert"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+  const rollback = useMutation({
     mutationFn: (id: number) =>
-      responseApi.approveResponseAction(id, { analyst_id: analystId }),
+      responseApi.rollbackResponseAction(id, { analyst_id: analystId }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["response"] });
       qc.invalidateQueries({ queryKey: ["alert"] });
@@ -218,9 +234,9 @@ export default function ResponseCenterPage() {
               <PendingActionRow
                 key={a.id}
                 action={a}
-                isApproving={approve.isPending && approve.variables === a.id}
+                isApproving={approve.isPending && approve.variables?.id === a.id}
                 isRejecting={reject.isPending && reject.variables?.id === a.id}
-                onApprove={() => approve.mutate(a.id)}
+                onApprove={(note) => approve.mutate({ id: a.id, note })}
                 onReject={(reason) => reject.mutate({ id: a.id, reason })}
               />
             ))}
@@ -232,10 +248,11 @@ export default function ResponseCenterPage() {
       <Card padding="none">
         <div className="border-b border-slate-800 px-5 py-3">
           <h3 className="text-sm font-semibold text-slate-200">
-            Simulated action execution history
+            Action execution history
           </h3>
           <p className="text-xs text-slate-500">
-            Last 50 response actions across every alert.
+            Last 50 response actions. The <span className="font-medium">Mode</span>{" "}
+            column always shows whether an action was simulated or lab-executed.
           </p>
         </div>
 
@@ -252,11 +269,11 @@ export default function ResponseCenterPage() {
                 <Th>#</Th>
                 <Th>Alert</Th>
                 <Th>Action</Th>
-                <Th>Approval</Th>
+                <Th>Mode</Th>
                 <Th>Status</Th>
                 <Th>Decided by</Th>
                 <Th>Executed</Th>
-                <Th>Age</Th>
+                <Th></Th>
               </Tr>
             </Thead>
             <Tbody>
@@ -274,8 +291,8 @@ export default function ResponseCenterPage() {
                   <Td>
                     <Badge tone="default">{a.action_type}</Badge>
                   </Td>
-                  <Td className="text-xs text-slate-400">
-                    {a.approval_required ? "analyst" : "auto"}
+                  <Td>
+                    <Badge tone={executionModeTone(a)}>{executionModeLabel(a)}</Badge>
                   </Td>
                   <Td>
                     <Badge tone={statusTone(a.status)}>{a.status}</Badge>
@@ -286,8 +303,30 @@ export default function ResponseCenterPage() {
                   <Td className="text-xs text-slate-400">
                     {a.executed_at ? formatRelative(a.executed_at) : "—"}
                   </Td>
-                  <Td className="text-xs text-slate-500">
-                    {formatRelative(a.created_at)}
+                  <Td>
+                    {canRollback(a) ? (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={rollback.isPending && rollback.variables === a.id}
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              `Roll back lab action #${a.id}? ${LAB_APPROVE_WARNING}`,
+                            )
+                          ) {
+                            rollback.mutate(a.id);
+                          }
+                        }}
+                      >
+                        {rollback.isPending && rollback.variables === a.id && (
+                          <Spinner className="h-3 w-3" />
+                        )}
+                        Roll back
+                      </Button>
+                    ) : a.rollback_status === "ROLLED_BACK" ? (
+                      <span className="text-xs text-slate-500">rolled back</span>
+                    ) : null}
                   </Td>
                 </Tr>
               ))}
@@ -305,7 +344,7 @@ interface PendingRowProps {
   action: ResponseActionOut;
   isApproving: boolean;
   isRejecting: boolean;
-  onApprove: () => void;
+  onApprove: (note?: string) => void;
   onReject: (reason: string) => void;
 }
 
@@ -317,8 +356,23 @@ function PendingActionRow({
   onReject,
 }: PendingRowProps) {
   const [open, setOpen] = useState(false);
+  const realLab = isRealLabAction(action);
   const rationale =
     (action.payload?.rationale as string | undefined) ?? "No rationale provided.";
+
+  function handleApprove() {
+    if (!realLab) {
+      onApprove();
+      return;
+    }
+    // Real lab action: require an explicit typed reason as confirmation.
+    const reason = window.prompt(
+      `⚠ Real LAB action on ${String(action.payload?.target_ip ?? "the lab")}.\n` +
+        `${LAB_APPROVE_WARNING}\nType a reason to confirm:`,
+      "",
+    );
+    if (reason && reason.trim()) onApprove(reason.trim());
+  }
 
   // Strip rationale + low-signal fields so the payload block focuses on what
   // the analyst still hasn't seen.
@@ -333,6 +387,9 @@ function PendingActionRow({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone="default">{action.action_type}</Badge>
+            <Badge tone={executionModeTone(action)}>
+              {executionModeLabel(action)}
+            </Badge>
             <Link
               to={`/alerts/${action.alert_id}`}
               className="font-mono text-xs text-emerald-400 hover:underline"
@@ -343,6 +400,12 @@ function PendingActionRow({
               · created {formatRelative(action.created_at)}
             </span>
           </div>
+          {realLab && (
+            <p className="mt-2 rounded-md border border-rose-900/60 bg-rose-950/40 px-3 py-2 text-xs text-rose-300">
+              ⚠ {LAB_APPROVE_WARNING} Approving runs a real action against the
+              configured lab target and will require a typed reason.
+            </p>
+          )}
           <p className="mt-2 text-sm text-slate-300">{rationale}</p>
           {Object.keys(extraPayload).length > 0 && (
             <button
@@ -362,13 +425,13 @@ function PendingActionRow({
 
         <div className="flex shrink-0 gap-2">
           <Button
-            variant="primary"
+            variant={realLab ? "danger" : "primary"}
             size="sm"
             disabled={isApproving || isRejecting}
-            onClick={onApprove}
+            onClick={handleApprove}
           >
             {isApproving && <Spinner className="h-3 w-3" />}
-            Approve
+            {realLab ? "Approve (LAB)" : "Approve"}
           </Button>
           <Button
             variant="danger"
