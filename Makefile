@@ -90,8 +90,12 @@ single-container: ## Build and run SentinelAI as one Docker container.
 test: test-backend test-frontend ## Run backend + frontend test suites.
 
 .PHONY: test-backend
-test-backend: ## Run the backend pytest suite (uses installed venv).
+test-backend: ## Run the backend pytest suite (fast unit tests; no DB).
 	cd backend && pytest
+
+.PHONY: test-integration
+test-integration: ## Run real-Postgres integration tests (needs Docker).
+	cd backend && pytest -m integration
 
 .PHONY: test-frontend
 test-frontend: ## Run the frontend vitest suite.

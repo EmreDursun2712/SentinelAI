@@ -20,8 +20,10 @@ known weak points, and the pre-demo checklist that keeps that budget intact.
 | Backend API      | `tests/test_health.py`           |     6 | optional |   **yes**     | `pytest tests/test_health.py`                                 |
 | Frontend unit    | `src/**/*.test.{ts,tsx}`         |    29 |   no     |    no         | `npm test`                                                    |
 | End-to-end smoke | `infra/scripts/smoke_demo.sh`    |    11 |  **yes** |   **yes**     | `bash infra/scripts/smoke_demo.sh` (needs running stack)      |
+| Integration      | `tests/integration/**`           |    32 | **real** |    no         | `pytest -m integration` (needs **Docker** — see §1.1)        |
 
-**Totals**: 142 pure-Python backend tests + 29 frontend tests + 11 e2e checks.
+**Totals**: 142 pure-Python backend tests + 29 frontend tests + 11 e2e checks,
+plus 32 real-Postgres integration tests on a separate `-m integration` lane.
 
 ### Running everything
 
@@ -46,6 +48,42 @@ npm run typecheck
 # End-to-end (requires docker compose + model staged)
 bash infra/scripts/smoke_demo.sh
 ```
+
+### 1.1 Unit vs integration (and the Docker requirement)
+
+The backend suite is split into two lanes that never block each other:
+
+- **Unit (default).** `pytest` runs only the fast, DB-free tests — the database
+  is stubbed (FastAPI dependency overrides + monkeypatch), so nothing external
+  is needed. `pyproject.toml` sets `addopts = ... -m 'not integration'`, so the
+  integration lane is excluded automatically.
+- **Integration (`-m integration`).** Real PostgreSQL via
+  [testcontainers](https://testcontainers.com). These verify migrations,
+  CHECK/FK/unique constraints, JSONB, and the committing service transactions —
+  the guarantees only a real engine can prove. They live in
+  `backend/tests/integration/`.
+
+```bash
+# fast lane — what `make test-backend` and CI's `backend` job run
+cd backend && pytest
+
+# real-database lane — REQUIRES DOCKER (spins up a throwaway Postgres)
+cd backend && pytest -m integration        # or: make test-integration
+```
+
+> **Docker is required for the integration lane.** testcontainers starts a
+> disposable `postgres:16-alpine` container for the test session. If Docker
+> isn't running — or testcontainers isn't installed — every integration test
+> **skips cleanly** rather than failing, so the unit lane is never held hostage
+> to the environment. CI runs them in a dedicated `integration` job
+> (`.github/workflows/backend.yml`); GitHub's ubuntu runners ship Docker.
+
+**Isolation.** Each test binds to a single connection holding an outer
+transaction and joins it with SAVEPOINTs
+(`join_transaction_mode="create_savepoint"`), so service code can `commit()`
+freely and everything still rolls back at teardown — no truncation between
+tests. Migration tests instead get their own throwaway database (created +
+dropped per test) so `upgrade head` runs against a guaranteed-empty schema.
 
 ---
 

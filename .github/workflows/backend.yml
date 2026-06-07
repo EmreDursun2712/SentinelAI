@@ -46,3 +46,25 @@ jobs:
         run: pip install -e ".[dev]"
       - name: Pytest
         run: pytest -q
+
+  # Real-Postgres tests (migrations, constraints, FK/transactions) via
+  # testcontainers. ubuntu-latest ships Docker, so the container spins up
+  # in-job. Separate from the fast unit job above so a unit failure is
+  # obvious and this heavier lane can run independently.
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+      - name: Integration tests (real Postgres)
+        run: pytest -m integration -q

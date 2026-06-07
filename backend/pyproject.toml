@@ -13,6 +13,8 @@ dependencies = [
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
     "sqlalchemy>=2.0.36",
+    # Required by SQLAlchemy's asyncio engine; not always pulled in transitively.
+    "greenlet>=3.0",
     "psycopg[binary]>=3.2",
     "alembic>=1.14",
     "python-jose[cryptography]>=3.3",
@@ -44,6 +46,9 @@ dev = [
     "ruff==0.15.16",
     "mypy>=1.13",
     "pip-audit>=2.7",
+    # Real-Postgres integration tests (`pytest -m integration`). Spins up a
+    # throwaway Postgres container; needs Docker. Optional for the unit suite.
+    "testcontainers[postgres]>=4.8",
 ]
 
 [build-system]
@@ -57,7 +62,13 @@ include = ["app*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-addopts = "-ra --strict-markers"
+# The default run is the fast, DB-free unit suite. Integration tests
+# (real Postgres via testcontainers, needs Docker) are excluded here and
+# opted into with `pytest -m integration`, which overrides this -m filter.
+addopts = "-ra --strict-markers -m 'not integration'"
+markers = [
+    "integration: real-database tests; require Docker (run with `pytest -m integration`).",
+]
 
 [tool.ruff]
 line-length = 100

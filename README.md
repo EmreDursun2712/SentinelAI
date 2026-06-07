@@ -108,6 +108,7 @@ Run `make help` for the live menu. Most common:
 | `make smoke`        | Run the 11-step end-to-end smoke test                         |
 | `make e2e`          | Full gate: up → train+stage model → smoke → `down -v`         |
 | `make test`         | Backend pytest + frontend vitest                              |
+| `make test-integration` | Real-Postgres backend tests (testcontainers; needs Docker) |
 | `make typecheck`    | `tsc --noEmit` on the frontend                                |
 | `make lint`         | Ruff lint + format check on the backend                       |
 | `make shell-db`     | Open a `psql` prompt against the dev database                 |
@@ -163,7 +164,7 @@ detail in [docs/QUALITY.md](docs/QUALITY.md#3-continuous-integration-pre-commit-
 
 | Workflow      | Checks                                                         |
 | ------------- | ------------------------------------------------------------- |
-| `backend`     | `ruff check` · `ruff format --check` · `pytest` (backend + sensor) |
+| `backend`     | `ruff check` · `ruff format --check` · `pytest` (backend + sensor) + integration (real Postgres) |
 | `frontend`    | `npm run typecheck` · `npm test`                              |
 | `security`    | `pip-audit` · `npm audit --audit-level=high` · CycloneDX SBOM |
 | `e2e`         | `make e2e` (manual / weekly)                                  |
@@ -183,6 +184,9 @@ pre-commit run --all-files
 # Or invoke the gates directly
 cd backend && ruff check . && ruff format --check . && pytest -q
 cd frontend && npm run typecheck && npm test
+
+# Real-database tests (migrations + DB constraints/transactions; needs Docker)
+cd backend && pytest -m integration        # or: make test-integration
 
 # Dependency audit
 cd backend && pip-audit                       # Python CVEs
