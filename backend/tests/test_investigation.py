@@ -15,7 +15,6 @@ from app.services.investigation_service import (
     _format_duration,
 )
 
-
 # ---------- _format_duration -----------------------------------------------
 
 

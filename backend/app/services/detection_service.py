@@ -76,9 +76,7 @@ def build_feature_matrix(
     return pd.DataFrame(rows, columns=feature_order)
 
 
-def should_create_alert(
-    label: str, confidence: float, threshold: float, benign_label: str
-) -> bool:
+def should_create_alert(label: str, confidence: float, threshold: float, benign_label: str) -> bool:
     """A non-benign label that clears the confidence threshold becomes an alert."""
     if label == benign_label:
         return False
@@ -150,9 +148,7 @@ def _parse_iso_dt(value: Any) -> datetime | None:
         return None
 
 
-async def ensure_model_version_row(
-    session: AsyncSession, bundle: ModelBundle
-) -> int:
+async def ensure_model_version_row(session: AsyncSession, bundle: ModelBundle) -> int:
     """Upsert + activate the ``model_versions`` row matching ``bundle``.
 
     The partial unique index ``uq_model_versions_one_active`` enforces that only
@@ -172,9 +168,7 @@ async def ensure_model_version_row(
 
     # Step 1 — deactivate every active row so the partial unique index stays valid.
     await session.execute(
-        update(ModelVersion)
-        .where(ModelVersion.is_active.is_(True))
-        .values(is_active=False)
+        update(ModelVersion).where(ModelVersion.is_active.is_(True)).values(is_active=False)
     )
 
     # Step 2 — insert or refresh the row we care about.
@@ -234,9 +228,7 @@ async def detect_events(
 
     model_version_id = await ensure_model_version_row(session, bundle)
 
-    X = build_feature_matrix(
-        [dict(ev.features or {}) for ev in events], bundle.feature_order
-    )
+    X = build_feature_matrix([dict(ev.features or {}) for ev in events], bundle.feature_order)
     # predict_proba is CPU-bound and synchronous; offload to a worker thread
     # so the event loop stays responsive when classifying large batches.
     labels, confs, probs = await asyncio.to_thread(_run_inference, bundle, X)
@@ -353,9 +345,7 @@ async def detect_events(
     return predictions
 
 
-async def fetch_undetected_events(
-    session: AsyncSession, limit: int
-) -> list[NetworkEvent]:
+async def fetch_undetected_events(session: AsyncSession, limit: int) -> list[NetworkEvent]:
     """Return up to ``limit`` events whose ``detected_at`` is still NULL, oldest first."""
     result = await session.execute(
         select(NetworkEvent)

@@ -116,6 +116,7 @@ async def list_alerts(
             Severity.LOW.value: 1,
         }
         from sqlalchemy import case
+
         sev_case = case(severity_order, value=Alert.severity, else_=0)
         stmt = stmt.order_by(sev_case.desc(), desc(Alert.created_at))
     else:
@@ -132,8 +133,12 @@ async def alert_stats(session: SessionDep) -> AlertStatsOut:
 
     async def _group(col):
         rows = (await session.execute(select(col, func.count()).group_by(col))).all()
-        return {(v.value if hasattr(v, "value") else (str(v) if v is not None else "UNASSIGNED")): int(c)
-                for v, c in rows}
+        return {
+            (v.value if hasattr(v, "value") else (str(v) if v is not None else "UNASSIGNED")): int(
+                c
+            )
+            for v, c in rows
+        }
 
     return AlertStatsOut(
         total=total,
@@ -303,9 +308,7 @@ async def reinvestigate(
 
 
 @router.get("/{alert_id}/investigation")
-async def get_alert_investigation(
-    session: SessionDep, alert_id: int
-) -> InvestigationOut:
+async def get_alert_investigation(session: SessionDep, alert_id: int) -> InvestigationOut:
     """Return the most recent investigation packet for an alert (without re-running)."""
     artifact = await get_latest_investigation(session, alert_id)
     if artifact is None:
@@ -339,9 +342,7 @@ async def generate_alert_report_endpoint(
 
 
 @router.get("/{alert_id}/report")
-async def get_alert_report_endpoint(
-    session: SessionDep, alert_id: int
-) -> AlertReportEnvelope:
+async def get_alert_report_endpoint(session: SessionDep, alert_id: int) -> AlertReportEnvelope:
     """Return the most recent incident report for this alert (no re-generation)."""
     report = await get_latest_alert_report(session, alert_id)
     if report is None:
@@ -364,7 +365,5 @@ async def close_alert(
     if alert is None:
         raise NotFoundError(f"Alert {alert_id} not found.")
     req = request or CloseAlertRequest()
-    updated = await svc_close_alert(
-        session, alert, analyst_id=req.analyst_id, note=req.note
-    )
+    updated = await svc_close_alert(session, alert, analyst_id=req.analyst_id, note=req.note)
     return AlertOut.model_validate(updated)

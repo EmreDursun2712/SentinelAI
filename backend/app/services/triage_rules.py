@@ -22,7 +22,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Final
 
-
 # ----- Component lookup tables --------------------------------------------
 
 
@@ -48,16 +47,16 @@ DEFAULT_FAMILY_WEIGHT: Final[float] = 0.50
 # Destination-port sensitivity. Numbers chosen to reflect typical SOC weighting:
 # admin/auth/database ports score higher than generic HTTP/DNS.
 PORT_CRITICALITY: Final[dict[int, float]] = {
-    22: 0.85,    # SSH
-    23: 0.95,    # Telnet
-    25: 0.55,    # SMTP
-    53: 0.40,    # DNS
-    80: 0.45,    # HTTP
-    110: 0.50,   # POP3
-    143: 0.55,   # IMAP
-    443: 0.50,   # HTTPS
-    445: 0.85,   # SMB
-    993: 0.55,   # IMAPS
+    22: 0.85,  # SSH
+    23: 0.95,  # Telnet
+    25: 0.55,  # SMTP
+    53: 0.40,  # DNS
+    80: 0.45,  # HTTP
+    110: 0.50,  # POP3
+    143: 0.55,  # IMAP
+    443: 0.50,  # HTTPS
+    445: 0.85,  # SMB
+    993: 0.55,  # IMAPS
     1433: 0.85,  # MSSQL
     1521: 0.80,  # Oracle
     3306: 0.80,  # MySQL
@@ -66,7 +65,7 @@ PORT_CRITICALITY: Final[dict[int, float]] = {
     6379: 0.75,  # Redis
     8080: 0.45,  # HTTP-alt
     9200: 0.70,  # Elasticsearch
-    27017: 0.75, # MongoDB
+    27017: 0.75,  # MongoDB
 }
 DEFAULT_PORT_WEIGHT: Final[float] = 0.30
 
@@ -155,8 +154,8 @@ class TriageScore:
     recent_count: int
     volume_score: float
     component_weights: dict[str, float]
-    priority: float          # 0–100, rounded to two decimals
-    severity: str            # LOW / MEDIUM / HIGH / CRITICAL
+    priority: float  # 0–100, rounded to two decimals
+    severity: str  # LOW / MEDIUM / HIGH / CRITICAL
     explanations: list[str]  # human-readable rationale, one line per factor
 
 

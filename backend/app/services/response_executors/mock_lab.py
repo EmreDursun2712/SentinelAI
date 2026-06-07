@@ -53,11 +53,7 @@ class MockLabExecutor(ResponseExecutor):
         is_network = action.action_type in NETWORK_ACTIONS
         applied = self._applied_minutes(action)
         exec_id = f"mock-{uuid.uuid4().hex[:12]}"
-        expires_at = (
-            datetime.now(UTC) + timedelta(minutes=applied)
-            if applied is not None
-            else None
-        )
+        expires_at = datetime.now(UTC) + timedelta(minutes=applied) if applied is not None else None
         logger.info(
             "lab.mock_execute",
             action_id=action.id,

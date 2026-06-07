@@ -8,12 +8,14 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import (
     BigInteger,
     DateTime,
-    Enum as SAEnum,
     ForeignKey,
     Index,
     String,
     Text,
     text,
+)
+from sqlalchemy import (
+    Enum as SAEnum,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -53,4 +55,4 @@ class IncidentReport(TimestampMixin, Base):
     md_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     pdf_path: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    alert: Mapped["Alert | None"] = relationship(back_populates="reports")
+    alert: Mapped[Alert | None] = relationship(back_populates="reports")

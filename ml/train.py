@@ -19,8 +19,8 @@ import logging
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 
@@ -29,9 +29,12 @@ from ml.artifacts import make_version, save_artifacts, update_latest
 from ml.baseline import compute_baseline
 from ml.data_loader import load_path
 from ml.metrics import compute_metrics, confusion_matrix_json
-from ml.pipeline import Algorithm, build_pipeline
+from ml.pipeline import build_pipeline
 from ml.preprocess import build_xy, clean_frame
 from ml.synthetic import generate as generate_synthetic
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 logger = logging.getLogger("sentinelai.ml.train")
 
@@ -42,9 +45,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     source = parser.add_mutually_exclusive_group(required=True)
-    source.add_argument(
-        "--data", type=Path, help="Path to a CSV file or directory of CSVs."
-    )
+    source.add_argument("--data", type=Path, help="Path to a CSV file or directory of CSVs.")
     source.add_argument(
         "--synthetic",
         type=int,
@@ -99,9 +100,7 @@ def _configure_logging(level: str) -> None:
     )
 
 
-def _load_data(args: argparse.Namespace) -> tuple["pd.DataFrame", str]:
-    import pandas as pd  # noqa: F401 — alias for return type
-
+def _load_data(args: argparse.Namespace) -> tuple[pd.DataFrame, str]:
     if args.synthetic is not None:
         logger.info("Generating %d synthetic rows", args.synthetic)
         return (
@@ -229,9 +228,7 @@ def main(argv: list[str] | None = None) -> int:
         # Drift-monitoring baseline: per-feature quantile bins + means/stds and
         # the training class distribution. The backend compares recent traffic
         # against this; artifacts without it report drift "unavailable".
-        "baseline": compute_baseline(
-            X_train, encoder.inverse_transform(y_train).tolist(), classes
-        ),
+        "baseline": compute_baseline(X_train, encoder.inverse_transform(y_train).tolist(), classes),
     }
     metrics_payload = {"validation": val_metrics, "test": test_metrics}
 

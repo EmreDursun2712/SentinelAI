@@ -159,9 +159,7 @@ async def investigate_alert(
     return artifact, packet
 
 
-async def get_latest_investigation(
-    session: AsyncSession, alert_id: int
-) -> AlertArtifact | None:
+async def get_latest_investigation(session: AsyncSession, alert_id: int) -> AlertArtifact | None:
     """Return the most recent ``INVESTIGATION_PACKET`` artifact for an alert."""
     stmt = (
         select(AlertArtifact)
@@ -425,7 +423,9 @@ def _format_duration(seconds: float) -> str:
     return f"{seconds / 86400:.1f} d"
 
 
-def _feature_importance(*, top_k: int) -> tuple[list[FeatureImportanceItem], str | None, str | None]:
+def _feature_importance(
+    *, top_k: int
+) -> tuple[list[FeatureImportanceItem], str | None, str | None]:
     """Pull global feature_importances_ from the loaded RF pipeline if possible."""
     bundle = get_model_registry().get()
     if bundle is None:

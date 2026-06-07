@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import BigInteger, Enum as SAEnum, ForeignKey, Index, Integer, text
+from sqlalchemy import BigInteger, ForeignKey, Index, Integer, text
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -46,5 +47,5 @@ class AgentDecision(CreatedAtMixin, Base):
     )
     latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    alert: Mapped["Alert"] = relationship(back_populates="decisions")
-    actions: Mapped[list["ResponseAction"]] = relationship(back_populates="decision")
+    alert: Mapped[Alert] = relationship(back_populates="decisions")
+    actions: Mapped[list[ResponseAction]] = relationship(back_populates="decision")

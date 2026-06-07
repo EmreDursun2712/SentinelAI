@@ -238,8 +238,7 @@ async def approve_action(
     """Simulate-execute a pending action. Auto-loads the alert for side effects."""
     if action.status != ResponseStatus.PENDING:
         raise AppError(
-            f"ResponseAction {action.id} is not pending "
-            f"(status={action.status.value}).",
+            f"ResponseAction {action.id} is not pending (status={action.status.value}).",
             details={"action_id": action.id, "status": action.status.value},
         )
 
@@ -291,8 +290,7 @@ async def reject_action(
 ) -> ResponseAction:
     if action.status != ResponseStatus.PENDING:
         raise AppError(
-            f"ResponseAction {action.id} is not pending "
-            f"(status={action.status.value}).",
+            f"ResponseAction {action.id} is not pending (status={action.status.value}).",
             details={"action_id": action.id, "status": action.status.value},
         )
     if not reason or not reason.strip():
@@ -366,9 +364,7 @@ async def _run_executor(
     _apply_disposition_side_effects(action, alert, now)
 
 
-def _apply_disposition_side_effects(
-    action: ResponseAction, alert: Alert, now: datetime
-) -> None:
+def _apply_disposition_side_effects(action: ResponseAction, alert: Alert, now: datetime) -> None:
     target_disposition = _DISPOSITION_SIDE_EFFECTS.get(action.action_type)
     if target_disposition is None:
         return

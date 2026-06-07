@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, Enum as SAEnum, Index, Integer, String, Text
+from sqlalchemy import BigInteger, DateTime, Index, Integer, String, Text
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
@@ -18,9 +19,7 @@ if TYPE_CHECKING:
 
 class IngestionJob(TimestampMixin, Base):
     __tablename__ = "ingestion_jobs"
-    __table_args__ = (
-        Index("ix_ingestion_jobs_status_created_at", "status", "created_at"),
-    )
+    __table_args__ = (Index("ix_ingestion_jobs_status_created_at", "status", "created_at"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     kind: Mapped[IngestionKind] = mapped_column(
@@ -36,10 +35,14 @@ class IngestionJob(TimestampMixin, Base):
     )
     rate_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
     records_total: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    records_done: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
-    records_failed: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    records_done: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    records_failed: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    events: Mapped[list["NetworkEvent"]] = relationship(back_populates="ingestion_job")
+    events: Mapped[list[NetworkEvent]] = relationship(back_populates="ingestion_job")

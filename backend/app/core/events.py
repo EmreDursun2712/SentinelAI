@@ -67,14 +67,10 @@ class EventBus:
         ]
         if not handlers:
             return
-        results = await asyncio.gather(
-            *(h(event) for h in handlers), return_exceptions=True
-        )
+        results = await asyncio.gather(*(h(event) for h in handlers), return_exceptions=True)
         for result in results:
             if isinstance(result, Exception):
-                logger.warning(
-                    "event.handler_failed", type=event.type, error=str(result)
-                )
+                logger.warning("event.handler_failed", type=event.type, error=str(result))
 
 
 _bus = EventBus()

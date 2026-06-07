@@ -41,9 +41,7 @@ async def create_user(
     if not username:
         raise ConflictError("Username must not be empty.")
     if await get_user_by_username(session, username) is not None:
-        raise ConflictError(
-            f"User '{username}' already exists.", details={"username": username}
-        )
+        raise ConflictError(f"User '{username}' already exists.", details={"username": username})
 
     user = User(
         username=username,
@@ -61,9 +59,7 @@ async def create_user(
     return user
 
 
-async def authenticate(
-    session: AsyncSession, *, username: str, password: str
-) -> User | None:
+async def authenticate(session: AsyncSession, *, username: str, password: str) -> User | None:
     """Return the user if credentials are valid and the account is active.
 
     Returns ``None`` for unknown user, wrong password, or deactivated account.
@@ -94,9 +90,7 @@ async def ensure_bootstrap_admin(
     existing = await get_user_by_username(session, username.strip())
     if existing is not None:
         return None
-    user = await create_user(
-        session, username=username, password=password, role=Role.ADMIN
-    )
+    user = await create_user(session, username=username, password=password, role=Role.ADMIN)
     logger.info("user.bootstrap_admin_created", username=username)
     return user
 

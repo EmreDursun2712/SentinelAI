@@ -31,7 +31,6 @@ from typing import Any, Final
 from app.models import Alert
 from app.models.enums import AlertDisposition, AlertStatus, ResponseActionType, Severity
 
-
 LOW_CONFIDENCE_SUPPRESS_THRESHOLD: Final[float] = 0.60
 
 
@@ -87,8 +86,7 @@ def _rate_limit(alert: Alert, *, auto: bool, rate: str) -> Recommendation:
         action_type=ResponseActionType.RATE_LIMIT,
         auto_execute=auto,
         rationale=(
-            f"DDoS pattern from {alert.src_ip} on dst_port={alert.dst_port}; "
-            f"throttle to {rate}."
+            f"DDoS pattern from {alert.src_ip} on dst_port={alert.dst_port}; throttle to {rate}."
         ),
         payload={"target_ip": alert.src_ip, "rate": rate, "scope": "perimeter"},
     )

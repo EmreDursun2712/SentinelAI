@@ -30,9 +30,7 @@ class User(TimestampMixin, Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    username: Mapped[str] = mapped_column(
-        String(80), nullable=False, unique=True, index=True
-    )
+    username: Mapped[str] = mapped_column(String(80), nullable=False, unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[Role] = mapped_column(
         SAEnum(Role, name="user_role_enum", native_enum=False, length=20),

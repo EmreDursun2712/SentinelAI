@@ -56,9 +56,7 @@ async def list_pending_actions(
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0, le=100_000)] = 0,
 ) -> list[ResponseActionOut]:
-    actions = await svc_list(
-        session, status=ResponseStatus.PENDING, limit=limit, offset=offset
-    )
+    actions = await svc_list(session, status=ResponseStatus.PENDING, limit=limit, offset=offset)
     return [_to_out(a) for a in actions]
 
 
@@ -87,9 +85,7 @@ async def list_response_actions(
     status_code=status.HTTP_200_OK,
     dependencies=[Depends(rate_limit("response"))],
 )
-async def recommend_for_alert_endpoint(
-    session: SessionDep, alert_id: int
-) -> RecommendResponse:
+async def recommend_for_alert_endpoint(session: SessionDep, alert_id: int) -> RecommendResponse:
     alert = await session.get(Alert, alert_id)
     if alert is None:
         raise NotFoundError(f"Alert {alert_id} not found.")
@@ -122,9 +118,7 @@ async def approve_response_action(
     if action is None:
         raise NotFoundError(f"ResponseAction {action_id} not found.")
     req = request or ApproveRequest()
-    updated = await svc_approve(
-        session, action, analyst_id=req.analyst_id, note=req.note
-    )
+    updated = await svc_approve(session, action, analyst_id=req.analyst_id, note=req.note)
     return _to_out(updated)
 
 
@@ -160,7 +154,5 @@ async def rollback_response_action(
     if action is None:
         raise NotFoundError(f"ResponseAction {action_id} not found.")
     req = request or RollbackRequest()
-    updated = await svc_rollback(
-        session, action, analyst_id=req.analyst_id, note=req.note
-    )
+    updated = await svc_rollback(session, action, analyst_id=req.analyst_id, note=req.note)
     return _to_out(updated)

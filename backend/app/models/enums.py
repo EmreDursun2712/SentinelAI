@@ -97,7 +97,7 @@ class ResponseActionType(str, enum.Enum):
     NOTIFY_ANALYST = "NOTIFY_ANALYST"
     NO_ACTION = "NO_ACTION"
     # Phase 4 additions
-    ESCALATE = "ESCALATE"            # raise to senior analyst, mark UNDER_REVIEW
+    ESCALATE = "ESCALATE"  # raise to senior analyst, mark UNDER_REVIEW
     ISOLATE_ALERT = "ISOLATE_ALERT"  # segregate alert for special handling
     SUPPRESS_ALERT = "SUPPRESS_ALERT"  # mark FALSE_POSITIVE + close
     CREATE_TICKET = "CREATE_TICKET"  # simulated incident-ticket creation
@@ -123,7 +123,7 @@ class ExecutionMode(str, enum.Enum):
 
 class RollbackStatus(str, enum.Enum):
     NOT_REQUIRED = "NOT_REQUIRED"  # nothing to undo (simulated / informational)
-    AVAILABLE = "AVAILABLE"        # a real lab effect that can be reverted
+    AVAILABLE = "AVAILABLE"  # a real lab effect that can be reverted
     ROLLED_BACK = "ROLLED_BACK"
     FAILED = "FAILED"
 
@@ -136,6 +136,6 @@ class IncidentKind(str, enum.Enum):
 class DriftStatus(str, enum.Enum):
     """Drift severity bucket derived from the overall drift score."""
 
-    OK = "OK"          # score < 0.10 — distribution stable
-    WATCH = "WATCH"    # 0.10 ≤ score < 0.25 — moderate shift, keep an eye on it
-    DRIFT = "DRIFT"    # score ≥ 0.25 — significant shift, model may need retraining
+    OK = "OK"  # score < 0.10 — distribution stable
+    WATCH = "WATCH"  # 0.10 ≤ score < 0.25 — moderate shift, keep an eye on it
+    DRIFT = "DRIFT"  # score ≥ 0.25 — significant shift, model may need retraining

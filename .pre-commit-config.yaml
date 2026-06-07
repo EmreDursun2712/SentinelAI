@@ -1,0 +1,40 @@
+# Local quality gate — mirrors what CI enforces, so problems surface before push.
+#   Install once:  pip install pre-commit && pre-commit install
+#   Run on demand: pre-commit run --all-files
+#
+# Ruff is pinned to the same version the backend/ml/sensor projects and CI use,
+# so formatting/lint results are identical everywhere.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.16
+    hooks:
+      - id: ruff-check
+        name: ruff (lint, autofix)
+        args: [--fix]
+      - id: ruff-format
+        name: ruff (format)
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: detect-private-key # lightweight secret scan
+      - id: check-merge-conflict
+      - id: check-yaml
+        exclude: ^.*/templates/.*$ # skip Helm-style templated YAML if any
+      - id: check-added-large-files
+        args: [--maxkb=2048]
+      - id: end-of-file-fixer
+        exclude: ^(.*\.lock|.*-lock\.json|.*\.svg)$
+      - id: trailing-whitespace
+        exclude: ^(.*\.lock|.*-lock\.json|.*\.svg)$
+
+  # Frontend type safety. Runs the project's own tsc; only triggers when
+  # TS/TSX sources change. Requires `npm ci` in frontend/ to have been run.
+  - repo: local
+    hooks:
+      - id: frontend-typecheck
+        name: frontend typecheck (tsc)
+        entry: bash -c 'cd frontend && npm run typecheck'
+        language: system
+        files: ^frontend/.*\.(ts|tsx)$
+        pass_filenames: false

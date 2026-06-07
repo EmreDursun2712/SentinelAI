@@ -21,7 +21,6 @@ from app.ingestion.feature_schema import (
     to_int_or_none,
 )
 
-
 # Keys lifted onto the ``NetworkEvent`` row itself, in priority of the data model.
 PRIMARY_KEYS: Final[frozenset[str]] = frozenset(
     {"event_time", "src_ip", "dst_ip", "src_port", "dst_port", "protocol", "label"}

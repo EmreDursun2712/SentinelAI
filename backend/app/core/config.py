@@ -42,12 +42,12 @@ class Settings(BaseSettings):
     redis_url: str | None = None
     rate_limit_enabled: bool = True
     # Compact "<count>/<unit>" specs; unit ∈ second|minute|hour. Env-overridable.
-    rate_limit_login: str = "5/minute"          # per IP+username
+    rate_limit_login: str = "5/minute"  # per IP+username
     rate_limit_authenticated: str = "120/minute"  # general per-user fallback
-    rate_limit_ingest: str = "10/minute"        # per user
-    rate_limit_detection: str = "5/minute"      # per user
-    rate_limit_report: str = "20/minute"        # per user
-    rate_limit_response: str = "60/minute"      # per user
+    rate_limit_ingest: str = "10/minute"  # per user
+    rate_limit_detection: str = "5/minute"  # per user
+    rate_limit_report: str = "20/minute"  # per user
+    rate_limit_response: str = "60/minute"  # per user
 
     # Ingestion
     ingest_data_dir: str = "data"
@@ -70,10 +70,10 @@ class Settings(BaseSettings):
     # Response execution. Default is fully simulated; LAB (real, allowlisted)
     # effects are impossible unless ALL of: enabled=true, mode=lab, a lab
     # executor, and allowed CIDRs. See ``lab_response_active``.
-    response_mode: str = "simulated"           # simulated | lab
+    response_mode: str = "simulated"  # simulated | lab
     response_enabled: bool = False
-    response_executor: str = "simulated"       # simulated | mock_lab | nftables_lab
-    response_allowed_cidrs: str = ""           # required for LAB; comma-separated
+    response_executor: str = "simulated"  # simulated | mock_lab | nftables_lab
+    response_allowed_cidrs: str = ""  # required for LAB; comma-separated
     response_max_block_minutes: int = 60
     response_require_approval: bool = True
 

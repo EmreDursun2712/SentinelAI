@@ -8,7 +8,8 @@ the dashboard never has to know about the on-disk markdown file. The
 
 from __future__ import annotations
 
-from datetime import date as date_t, datetime
+from datetime import date as date_t
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -22,7 +23,6 @@ from app.models.enums import (
     Severity,
 )
 from app.schemas.common import IpString
-
 
 # ---------- per-section payloads -----------------------------------------
 

@@ -188,9 +188,7 @@ async def test_drift_latest_requires_auth(client: AsyncClient) -> None:
 
 
 async def test_drift_run_forbidden_for_viewer(client: AsyncClient) -> None:
-    resp = await client.post(
-        "/api/v1/detection/drift/run", headers=_headers(Role.VIEWER)
-    )
+    resp = await client.post("/api/v1/detection/drift/run", headers=_headers(Role.VIEWER))
     assert resp.status_code == 403
 
 
@@ -204,9 +202,7 @@ async def test_drift_latest_reports_unavailable(
         return None
 
     monkeypatch.setattr(drift_service, "get_latest_snapshot", fake_latest)
-    resp = await client.get(
-        "/api/v1/detection/drift/latest", headers=_headers(Role.VIEWER)
-    )
+    resp = await client.get("/api/v1/detection/drift/latest", headers=_headers(Role.VIEWER))
     assert resp.status_code == 200
     body = resp.json()
     assert body["available"] is False
@@ -224,9 +220,7 @@ async def test_drift_run_analyst_gets_report(
         return DriftRunResult(False, reason="baseline_unavailable")
 
     monkeypatch.setattr(drift_service, "run_drift_check", fake_run)
-    resp = await client.post(
-        "/api/v1/detection/drift/run", headers=_headers(Role.ANALYST)
-    )
+    resp = await client.post("/api/v1/detection/drift/run", headers=_headers(Role.ANALYST))
     assert resp.status_code == 200
     body = resp.json()
     assert body["available"] is False

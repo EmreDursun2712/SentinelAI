@@ -16,11 +16,7 @@ router = APIRouter(prefix="/dashboard")
 async def _group(session, col) -> dict[str, int]:
     rows = (await session.execute(select(col, func.count()).group_by(col))).all()
     return {
-        (
-            v.value
-            if hasattr(v, "value")
-            else (str(v) if v is not None else "UNASSIGNED")
-        ): int(c)
+        (v.value if hasattr(v, "value") else (str(v) if v is not None else "UNASSIGNED")): int(c)
         for v, c in rows
     }
 
@@ -29,12 +25,9 @@ async def _group(session, col) -> dict[str, int]:
 async def dashboard_overview(session: SessionDep) -> DashboardOverviewOut:
     """One round trip for every KPI + chart aggregation the dashboard needs."""
     total_events = int(
-        (await session.execute(select(func.count(NetworkEvent.id)))).scalar_one()
-        or 0
+        (await session.execute(select(func.count(NetworkEvent.id)))).scalar_one() or 0
     )
-    total_alerts = int(
-        (await session.execute(select(func.count(Alert.id)))).scalar_one() or 0
-    )
+    total_alerts = int((await session.execute(select(func.count(Alert.id)))).scalar_one() or 0)
     open_alerts = int(
         (
             await session.execute(

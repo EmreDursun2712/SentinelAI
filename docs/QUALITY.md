@@ -65,9 +65,77 @@ Frontend has ESLint listed as a dependency but no flat config file ships —
 TypeScript's `tsc --noEmit` is the primary correctness gate; tests cover
 behavior.
 
+> **Ruff is pinned** to `0.15.16` in `backend/`, `ml/`, and `sensor/`
+> `pyproject.toml`, in CI, and in the pre-commit config — so a `ruff format`
+> on one machine produces byte-identical output everywhere. Bump it in all
+> three places at once (Dependabot opens grouped PRs that do this).
+
 ---
 
-## 3. Pre-demo checklist
+## 3. Continuous integration, pre-commit & supply-chain
+
+### 3.1 GitHub Actions
+
+Four workflows live in [`.github/workflows/`](../.github/workflows). The fast
+lanes run on every push to `main` and on PRs (path-filtered, so a frontend PR
+doesn't spin up the Python jobs); the heavy lanes are scheduled / on-demand.
+
+| Workflow      | When                                  | What it does                                                                 |
+| ------------- | ------------------------------------- | --------------------------------------------------------------------------- |
+| `backend.yml` | push/PR touching `backend/**`,`sensor/**` | `pip install -e ".[dev]"` → `ruff check .` → `ruff format --check .` → `pytest -q` for **backend** and **sensor** (separate jobs) |
+| `frontend.yml`| push/PR touching `frontend/**`        | `npm ci` → `npm run typecheck` → `npm test`                                  |
+| `security.yml`| push/PR + weekly (Mon 06:00 UTC)      | `pip-audit` (informational), `npm audit --audit-level=high` (gating), CycloneDX SBOM artifact |
+| `e2e.yml`     | manual + weekly (Mon 05:00 UTC)       | `make e2e` — builds images, boots the stack, trains+stages a model, runs the smoke test, tears down |
+
+`e2e.yml` is deliberately *not* on every PR — it builds Docker images and
+trains a model, which is too slow for the inner loop. Trigger it by hand from
+the Actions tab before a milestone, or let the weekly run catch regressions.
+
+### 3.2 pre-commit (local gate)
+
+The same checks CI enforces, run on staged files before each commit. Config:
+[`.pre-commit-config.yaml`](../.pre-commit-config.yaml).
+
+```bash
+pip install pre-commit
+pre-commit install          # wire it into git (one-time)
+pre-commit run --all-files  # run every hook against the whole tree
+```
+
+Hooks: `ruff-check --fix`, `ruff-format`, `detect-private-key` (lightweight
+secret scan), `check-merge-conflict`, `check-yaml`, `check-added-large-files`,
+end-of-file / trailing-whitespace fixers, and a **frontend typecheck** local
+hook that runs `npm run typecheck` when any `.ts/.tsx` changes (needs
+`npm ci` in `frontend/` first).
+
+### 3.3 Dependency audit & SBOM
+
+```bash
+# Python — known CVEs in the installed dependency set
+pip install pip-audit
+pip-audit -e ./backend -e ./sensor          # or: cd backend && pip-audit
+
+# Frontend — fail on high/critical advisories (matches CI threshold)
+cd frontend && npm audit --audit-level=high
+
+# Software Bill of Materials (CycloneDX JSON)
+pip install cyclonedx-bom
+cd backend && cyclonedx-py environment -o ../sbom-backend.json
+```
+
+`pip-audit` runs `continue-on-error` in CI (transitive advisories we can't
+fix shouldn't redden the board); `npm audit` *gates* at `high`. SBOM is
+uploaded as a build artifact for inspection.
+
+### 3.4 Automated dependency updates
+
+[`.github/dependabot.yml`](../.github/dependabot.yml) opens weekly grouped PRs
+for: `pip` in `backend/`, `ml/`, `sensor/`; `npm` in `frontend/`; and
+`github-actions`. Grouping keeps each ecosystem to one PR per week.
+
+---
+
+## 4. Pre-demo checklist
 
 The five-minute sanity check before standing in front of a class. Each line
 is a single shell or browser action.
@@ -100,7 +168,7 @@ docker compose restart backend   # picks up the existing model
 
 ---
 
-## 4. Bug-risk review
+## 5. Bug-risk review
 
 A scan of the codebase for places where things can plausibly go wrong on the
 demo day. Each item is tagged with severity for a course-project context.
@@ -179,33 +247,29 @@ demo day. Each item is tagged with severity for a course-project context.
 
 ---
 
-## 5. Suggested minimal improvements
+## 6. Suggested minimal improvements
 
-In rough order of value vs. effort:
+The CI/pre-commit/audit items that used to live here are **now shipped** —
+see [§3](#3-continuous-integration-pre-commit--supply-chain) (backend &
+frontend Actions gates, the `make e2e` recipe, `pip-audit` / `npm audit`,
+SBOM, Dependabot, and the pre-commit config with ruff + secret-scan hooks).
 
-1. **Backend CI gate** — three lines in a GitHub Action:
-   ```yaml
-   - run: pip install -e ".[dev]" --no-cache-dir
-   - run: ruff check . && ruff format --check .
-   - run: pytest
-   ```
-2. **Frontend CI gate**:
-   ```yaml
-   - run: npm ci
-   - run: npm run typecheck && npm test
-   ```
-3. **Wrap the smoke test in CI** behind a `make e2e` recipe that boots
-   docker compose, runs the script, and tears down.
-4. **Promote `/health` and `/readyz` to a basic liveness probe in CI** so
-   a broken main branch is caught before the demo morning.
-5. **Add a `pytest --tb=short -m "not integration"` marker** for splitting
-   unit vs. integration when the project grows.
-6. **Add a `pre-commit` config** with `ruff` + `prettier` hooks. Saves the
-   "I forgot to format" PR comments.
+What's left, in rough order of value vs. effort:
+
+1. **Liveness probe job in CI** — boot the stack and assert `/health` +
+   `/readyz` go green, so a broken `main` is caught before demo morning.
+   (The weekly `e2e.yml` already exercises this; a lighter PR-time variant
+   would tighten the loop.)
+2. **`pytest` markers** (`-m "not integration"`) to split the FastAPI-
+   dependent tests from the pure-Python subset as the suite grows.
+3. **Frontend ESLint flat config + prettier** wired into pre-commit, once a
+   house style is worth enforcing beyond `tsc`.
+4. **Coverage reporting** (`pytest --cov`, `vitest --coverage`) published as
+   a CI artifact, if a coverage target becomes meaningful.
 
 ---
 
-## 6. Troubleshooting
+## 7. Troubleshooting
 
 | Symptom                                                   | Likely cause                                                          | Fix                                                                          |
 | --------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------- |

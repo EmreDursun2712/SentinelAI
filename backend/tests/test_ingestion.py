@@ -16,7 +16,6 @@ from app.ingestion.feature_schema import (
 )
 from app.ingestion.parser import parse_event_time, parse_row
 
-
 # ---------- column normalization ----------
 
 
@@ -216,6 +215,4 @@ def test_sample_csv_parses_without_errors() -> None:
     with sample.open("rb") as fh:
         results = list(stream_csv(fh))
     assert results, "sample CSV produced no rows"
-    assert all(r.ok for r in results), [
-        (r.row_number, r.error) for r in results if not r.ok
-    ]
+    assert all(r.ok for r in results), [(r.row_number, r.error) for r in results if not r.ok]

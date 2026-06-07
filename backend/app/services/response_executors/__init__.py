@@ -47,8 +47,7 @@ def get_executor(settings: Settings, mode: ExecutionMode) -> ResponseExecutor:
 
     if not settings.lab_response_active:
         raise AppError(
-            "LAB response is not enabled or is misconfigured; refusing to "
-            "execute a LAB action.",
+            "LAB response is not enabled or is misconfigured; refusing to execute a LAB action.",
             details={
                 "response_enabled": settings.response_enabled,
                 "response_mode": settings.response_mode,

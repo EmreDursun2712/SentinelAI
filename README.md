@@ -106,6 +106,7 @@ Run `make help` for the live menu. Most common:
 | `make logs-backend` | Tail backend logs only                                        |
 | `make seed`         | Re-train the detection model and restart the backend         |
 | `make smoke`        | Run the 11-step end-to-end smoke test                         |
+| `make e2e`          | Full gate: up → train+stage model → smoke → `down -v`         |
 | `make test`         | Backend pytest + frontend vitest                              |
 | `make typecheck`    | `tsc --noEmit` on the frontend                                |
 | `make lint`         | Ruff lint + format check on the backend                       |
@@ -150,6 +151,46 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e .
 python -m ml.train --synthetic 50000
 ```
+
+---
+
+## Quality gates
+
+CI runs on every push/PR; the same checks run locally via pre-commit. Full
+detail in [docs/QUALITY.md](docs/QUALITY.md#3-continuous-integration-pre-commit--supply-chain).
+
+**GitHub Actions** ([`.github/workflows/`](.github/workflows)):
+
+| Workflow      | Checks                                                         |
+| ------------- | ------------------------------------------------------------- |
+| `backend`     | `ruff check` · `ruff format --check` · `pytest` (backend + sensor) |
+| `frontend`    | `npm run typecheck` · `npm test`                              |
+| `security`    | `pip-audit` · `npm audit --audit-level=high` · CycloneDX SBOM |
+| `e2e`         | `make e2e` (manual / weekly)                                  |
+
+[Dependabot](.github/dependabot.yml) opens weekly grouped dependency PRs
+(pip for backend/ml/sensor, npm for frontend, GitHub Actions).
+
+**Local — run the checks before you push:**
+
+```bash
+# One-time: install the git hook
+pip install pre-commit && pre-commit install
+
+# Run every hook against the whole tree (ruff, secret scan, frontend tsc, …)
+pre-commit run --all-files
+
+# Or invoke the gates directly
+cd backend && ruff check . && ruff format --check . && pytest -q
+cd frontend && npm run typecheck && npm test
+
+# Dependency audit
+cd backend && pip-audit                       # Python CVEs
+cd frontend && npm audit --audit-level=high   # npm advisories (high+)
+```
+
+Ruff is pinned to `0.15.16` everywhere (backend/ml/sensor `pyproject.toml`,
+CI, and pre-commit) so formatting is identical on every machine.
 
 ---
 

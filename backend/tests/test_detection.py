@@ -10,13 +10,11 @@ import numpy as np
 import pytest
 
 from app.services.detection_service import (
-    Prediction,
     build_feature_matrix,
     predict_flows,
     should_create_alert,
 )
 from app.services.model_registry import ModelBundle, ModelRegistry
-
 
 # ----- build_feature_matrix ------------------------------------------------
 
@@ -57,27 +55,19 @@ def test_build_feature_matrix_empty_input() -> None:
 
 
 def test_alert_decision_below_threshold_does_not_trigger() -> None:
-    assert not should_create_alert(
-        "DDoS", confidence=0.4, threshold=0.5, benign_label="BENIGN"
-    )
+    assert not should_create_alert("DDoS", confidence=0.4, threshold=0.5, benign_label="BENIGN")
 
 
 def test_alert_decision_at_threshold_triggers() -> None:
-    assert should_create_alert(
-        "DDoS", confidence=0.5, threshold=0.5, benign_label="BENIGN"
-    )
+    assert should_create_alert("DDoS", confidence=0.5, threshold=0.5, benign_label="BENIGN")
 
 
 def test_alert_decision_benign_never_triggers() -> None:
-    assert not should_create_alert(
-        "BENIGN", confidence=1.0, threshold=0.0, benign_label="BENIGN"
-    )
+    assert not should_create_alert("BENIGN", confidence=1.0, threshold=0.0, benign_label="BENIGN")
 
 
 def test_alert_decision_non_benign_above_threshold_triggers() -> None:
-    assert should_create_alert(
-        "PortScan", confidence=0.99, threshold=0.5, benign_label="BENIGN"
-    )
+    assert should_create_alert("PortScan", confidence=0.99, threshold=0.5, benign_label="BENIGN")
 
 
 # ----- predict_flows (with a fake pipeline) --------------------------------
@@ -90,7 +80,7 @@ class _FakePipeline:
         self.classes_ = classes
         self._rows = rows
 
-    def predict_proba(self, X) -> np.ndarray:  # noqa: ARG002 — interface only
+    def predict_proba(self, X) -> np.ndarray:
         return np.array(self._rows)
 
 
@@ -120,7 +110,10 @@ def test_predict_flows_returns_top_class_with_probabilities() -> None:
         SimpleNamespace(features={"flow_duration": 1500.0, "total_fwd_packets": 12}),
     ]
     preds = predict_flows(
-        bundle, flows, threshold=0.5, benign_label="BENIGN"  # type: ignore[arg-type]
+        bundle,
+        flows,
+        threshold=0.5,
+        benign_label="BENIGN",  # type: ignore[arg-type]
     )
     assert len(preds) == 2
 
@@ -160,6 +153,7 @@ def test_model_registry_rejects_metadata_without_classes(tmp_path: Path) -> None
     # we won't actually load it because metadata is invalid first... wait,
     # registry loads model THEN metadata. So write a tiny pickle.
     import joblib
+
     joblib.dump({"fake": "model"}, latest / "model.joblib")
     (latest / "metadata.json").write_text(json.dumps({"classes": [], "feature_order": []}))
 

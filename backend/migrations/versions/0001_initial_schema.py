@@ -162,9 +162,7 @@ def upgrade() -> None:
     op.create_index("ix_network_events_event_time", "network_events", ["event_time"])
     op.create_index("ix_network_events_src_ip", "network_events", ["src_ip"])
     op.create_index("ix_network_events_dst_ip", "network_events", ["dst_ip"])
-    op.create_index(
-        "ix_network_events_ingestion_job_id", "network_events", ["ingestion_job_id"]
-    )
+    op.create_index("ix_network_events_ingestion_job_id", "network_events", ["ingestion_job_id"])
 
     op.create_table(
         "alerts",
@@ -244,9 +242,7 @@ def upgrade() -> None:
             "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
         ),
     )
-    op.create_index(
-        "ix_alert_artifacts_alert_id_kind", "alert_artifacts", ["alert_id", "kind"]
-    )
+    op.create_index("ix_alert_artifacts_alert_id_kind", "alert_artifacts", ["alert_id", "kind"])
 
     op.create_table(
         "agent_decisions",
@@ -384,9 +380,7 @@ def upgrade() -> None:
         ["kind", "created_at"],
     )
     op.create_index("ix_incident_reports_alert_id", "incident_reports", ["alert_id"])
-    op.create_index(
-        "ix_incident_reports_period_start", "incident_reports", ["period_start"]
-    )
+    op.create_index("ix_incident_reports_period_start", "incident_reports", ["period_start"])
 
 
 def downgrade() -> None:

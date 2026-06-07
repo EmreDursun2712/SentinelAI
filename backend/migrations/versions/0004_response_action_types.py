@@ -44,9 +44,7 @@ def _check_expression(values: tuple[str, ...]) -> str:
 
 
 def upgrade() -> None:
-    op.execute(
-        "ALTER TABLE response_actions DROP CONSTRAINT IF EXISTS response_action_type_enum"
-    )
+    op.execute("ALTER TABLE response_actions DROP CONSTRAINT IF EXISTS response_action_type_enum")
     op.create_check_constraint(
         "response_action_type_enum",
         "response_actions",
@@ -57,9 +55,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     # Any rows using the new action types must be deleted/migrated before this
     # downgrade succeeds — otherwise the CHECK creation will fail loudly.
-    op.execute(
-        "ALTER TABLE response_actions DROP CONSTRAINT IF EXISTS response_action_type_enum"
-    )
+    op.execute("ALTER TABLE response_actions DROP CONSTRAINT IF EXISTS response_action_type_enum")
     op.create_check_constraint(
         "response_action_type_enum",
         "response_actions",

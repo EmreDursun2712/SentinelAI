@@ -135,9 +135,7 @@ async def _configure_rate_limiter(settings) -> None:
 
     if not settings.redis_url:
         if settings.is_production:
-            raise RuntimeError(
-                "SENTINEL_REDIS_URL is required for rate limiting in production."
-            )
+            raise RuntimeError("SENTINEL_REDIS_URL is required for rate limiting in production.")
         set_rate_limiter(InMemoryRateLimiter())
         logger.warning("ratelimit.no_redis_url", backend="memory", env=settings.env)
         return
@@ -205,9 +203,7 @@ def create_app() -> FastAPI:
     #   Rate: the "authenticated" policy (default 120/min per user). Expensive
     #   endpoints add their own stricter policy on top (see each router).
     protected = [Depends(enforce_rbac), Depends(rate_limit("authenticated"))]
-    app.include_router(
-        alerts.router, prefix=API_V1_PREFIX, tags=["alerts"], dependencies=protected
-    )
+    app.include_router(alerts.router, prefix=API_V1_PREFIX, tags=["alerts"], dependencies=protected)
     app.include_router(
         response.router, prefix=API_V1_PREFIX, tags=["response"], dependencies=protected
     )

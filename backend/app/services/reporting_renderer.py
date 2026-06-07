@@ -17,12 +17,10 @@ from app.schemas.reporting import (
     DetectionSection,
     InvestigationSection,
     OverviewSection,
-    ResponseActionRow,
     ResponseSection,
     SeverityPrioritySection,
     TimelineSection,
 )
-
 
 # ---------- helpers --------------------------------------------------------
 
@@ -100,11 +98,7 @@ def _render_overview(o: OverviewSection) -> list[str]:
     src = f"{o.src_ip}:{o.src_port}" if o.src_port is not None else o.src_ip
     dst = f"{o.dst_ip}:{o.dst_port}" if o.dst_port is not None else o.dst_ip
     proto = f" ({o.protocol})" if o.protocol else ""
-    model = (
-        f"{o.model_name}@{o.model_version}"
-        if o.model_name
-        else "— (no model attached)"
-    )
+    model = f"{o.model_name}@{o.model_version}" if o.model_name else "— (no model attached)"
     rows = [
         ["**Alert ID**", f"#{o.alert_id}"],
         ["**Created (UTC)**", _md_dt(o.created_at)],
@@ -142,7 +136,9 @@ def _render_severity_priority(s: SeverityPrioritySection) -> list[str]:
         if f.confidence_score is not None:
             lines.append(f"- confidence → score {f.confidence_score:.2f}")
         if f.port_score is not None:
-            lines.append(f"- dst_port={f.dst_port if f.dst_port is not None else '—'} → score {f.port_score:.2f}")
+            lines.append(
+                f"- dst_port={f.dst_port if f.dst_port is not None else '—'} → score {f.port_score:.2f}"
+            )
         if f.volume_score is not None:
             lines.append(f"- volume → score {f.volume_score:.2f}")
     else:
@@ -169,9 +165,7 @@ def _render_detection(d: DetectionSection | None) -> list[str]:
         lines.append("")
         lines.append("**Class probabilities:**")
         lines.append("")
-        sorted_probs = sorted(
-            d.class_probabilities.items(), key=lambda kv: kv[1], reverse=True
-        )
+        sorted_probs = sorted(d.class_probabilities.items(), key=lambda kv: kv[1], reverse=True)
         lines.extend(
             _join_table(
                 ["Class", "Probability"],
@@ -226,7 +220,10 @@ def _render_investigation(inv: InvestigationSection) -> list[str]:
         lines.extend(
             _join_table(
                 ["Feature", "Importance"],
-                [[fi.feature, _md_float(fi.importance, digits=4)] for fi in inv.feature_importance[:10]],
+                [
+                    [fi.feature, _md_float(fi.importance, digits=4)]
+                    for fi in inv.feature_importance[:10]
+                ],
             )
         )
 
@@ -245,11 +242,13 @@ def _render_timeline(t: TimelineSection) -> list[str]:
     rows: list[list[Any]] = []
     for item in t.items:
         marker = "▶ **THIS ALERT** " if item.is_current_alert else ""
-        rows.append([
-            _md_dt(item.timestamp),
-            item.kind,
-            marker + item.summary,
-        ])
+        rows.append(
+            [
+                _md_dt(item.timestamp),
+                item.kind,
+                marker + item.summary,
+            ]
+        )
     lines.extend(_join_table(["Time (UTC)", "Kind", "Summary"], rows))
     return lines
 
@@ -274,9 +273,7 @@ def _render_response(r: ResponseSection) -> list[str]:
                 rationale,
             ]
         )
-    lines.extend(
-        _join_table(["#", "Action", "Approval", "Status", "Executed", "Rationale"], rows)
-    )
+    lines.extend(_join_table(["#", "Action", "Approval", "Status", "Executed", "Rationale"], rows))
 
     lines.append("")
     lines.append(
@@ -357,7 +354,7 @@ def render_daily_summary_markdown(packet: DailySummaryPacket) -> str:
         if not rows:
             lines.append("_No data in this period._")
             return
-        body = [[r.get(key_label.lower().replace(' ', '_'), '—'), r.get("count", 0)] for r in rows]
+        body = [[r.get(key_label.lower().replace(" ", "_"), "—"), r.get("count", 0)] for r in rows]
         lines.extend(_join_table([key_label, "Count"], body))
 
     _top_table("Top source IPs", packet.top_sources, "Source IP")
@@ -372,7 +369,10 @@ def render_daily_summary_markdown(packet: DailySummaryPacket) -> str:
     rows = [
         ["**Detection → Triage**", _md_float(packet.mean_triage_latency_seconds, digits=2)],
         ["**Detection → Response**", _md_float(packet.mean_response_latency_seconds, digits=2)],
-        ["**Detection → Investigation**", _md_float(packet.mean_investigation_latency_seconds, digits=2)],
+        [
+            "**Detection → Investigation**",
+            _md_float(packet.mean_investigation_latency_seconds, digits=2),
+        ],
         ["**Detection → Report**", _md_float(packet.mean_report_latency_seconds, digits=2)],
     ]
     lines.extend(_join_table(["Stage", "Mean (s)"], rows))

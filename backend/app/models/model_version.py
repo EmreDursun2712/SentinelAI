@@ -59,4 +59,4 @@ class ModelVersion(TimestampMixin, Base):
     )
     trained_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    alerts: Mapped[list["Alert"]] = relationship(back_populates="model_version")
+    alerts: Mapped[list[Alert]] = relationship(back_populates="model_version")

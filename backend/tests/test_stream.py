@@ -144,9 +144,10 @@ def test_ws_rejects_missing_token(app: FastAPI) -> None:
 
 def test_ws_rejects_invalid_token(app: FastAPI) -> None:
     client = TestClient(app)
-    with pytest.raises(WebSocketDisconnect), client.websocket_connect(
-        "/api/v1/stream?token=not-a-jwt"
-    ) as ws:
+    with (
+        pytest.raises(WebSocketDisconnect),
+        client.websocket_connect("/api/v1/stream?token=not-a-jwt") as ws,
+    ):
         ws.receive_text()
 
 

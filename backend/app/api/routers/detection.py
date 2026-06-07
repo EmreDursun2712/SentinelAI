@@ -106,9 +106,7 @@ async def model_info(session: SessionDep) -> ModelInfoOut:
     is_active: bool | None = None
     if db_id is not None:
         is_active = (
-            await session.execute(
-                select(ModelVersion.is_active).where(ModelVersion.id == db_id)
-            )
+            await session.execute(select(ModelVersion.is_active).where(ModelVersion.id == db_id))
         ).scalar_one_or_none()
     else:
         row = (
@@ -186,9 +184,7 @@ async def detect_one(session: SessionDep, event_id: int) -> PredictionOut:
     status_code=status.HTTP_200_OK,
     dependencies=[Depends(rate_limit("detection"))],
 )
-async def detect_many(
-    session: SessionDep, request: BatchEventRequest
-) -> list[PredictionOut]:
+async def detect_many(session: SessionDep, request: BatchEventRequest) -> list[PredictionOut]:
     bundle = _require_bundle()
     settings = get_settings()
 
@@ -264,9 +260,7 @@ async def run_recent(session: SessionDep, request: RunRequest) -> RunSummary:
 async def drift_latest(session: SessionDep) -> DriftReport:
     snapshot = await drift_service.get_latest_snapshot(session)
     if snapshot is None:
-        return _drift_report(
-            drift_service.DriftRunResult(False, reason="no_snapshot")
-        )
+        return _drift_report(drift_service.DriftRunResult(False, reason="no_snapshot"))
     return _drift_report(drift_service.DriftRunResult(True, snapshot=snapshot))
 
 
@@ -276,9 +270,7 @@ async def drift_history(
     limit: Annotated[int, Query(ge=1, le=200)] = 20,
 ) -> DriftHistoryOut:
     snapshots = await drift_service.list_snapshots(session, limit=limit)
-    return DriftHistoryOut(
-        items=[DriftSnapshotOut.model_validate(s) for s in snapshots]
-    )
+    return DriftHistoryOut(items=[DriftSnapshotOut.model_validate(s) for s in snapshots])
 
 
 @router.post(
@@ -286,11 +278,7 @@ async def drift_history(
     status_code=status.HTTP_200_OK,
     dependencies=[Depends(rate_limit("detection"))],
 )
-async def drift_run(
-    session: SessionDep, request: DriftRunRequest | None = None
-) -> DriftReport:
+async def drift_run(session: SessionDep, request: DriftRunRequest | None = None) -> DriftReport:
     req = request or DriftRunRequest()
-    result = await drift_service.run_drift_check(
-        session, window_hours=req.window_hours
-    )
+    result = await drift_service.run_drift_check(session, window_hours=req.window_hours)
     return _drift_report(result)

@@ -57,9 +57,15 @@ class RateLimitResult:
 
 
 _UNIT_SECONDS = {
-    "second": 1, "sec": 1, "s": 1,
-    "minute": 60, "min": 60, "m": 60,
-    "hour": 3600, "hr": 3600, "h": 3600,
+    "second": 1,
+    "sec": 1,
+    "s": 1,
+    "minute": 60,
+    "min": 60,
+    "m": 60,
+    "hour": 3600,
+    "hr": 3600,
+    "h": 3600,
 }
 
 

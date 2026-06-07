@@ -50,9 +50,7 @@ class NetworkEvent(CreatedAtMixin, Base):
         JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
     )
     label: Mapped[str | None] = mapped_column(String(40), nullable=True)
-    detected_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    detected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    ingestion_job: Mapped["IngestionJob | None"] = relationship(back_populates="events")
-    alerts: Mapped[list["Alert"]] = relationship(back_populates="event")
+    ingestion_job: Mapped[IngestionJob | None] = relationship(back_populates="events")
+    alerts: Mapped[list[Alert]] = relationship(back_populates="event")

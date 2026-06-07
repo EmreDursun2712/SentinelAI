@@ -36,7 +36,9 @@ def upgrade() -> None:
             server_default="SIMULATED",
         ),
     )
-    op.add_column("response_actions", sa.Column("executor_name", sa.String(length=40), nullable=True))
+    op.add_column(
+        "response_actions", sa.Column("executor_name", sa.String(length=40), nullable=True)
+    )
     op.add_column(
         "response_actions",
         sa.Column("external_execution_id", sa.String(length=120), nullable=True),

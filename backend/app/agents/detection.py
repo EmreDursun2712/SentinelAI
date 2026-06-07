@@ -27,9 +27,7 @@ class DetectionAgent(Agent):
         # Subscription wiring lands in Phase 4 alongside the agent runtime.
         return None
 
-    async def process_recent(
-        self, session: AsyncSession, limit: int = 100
-    ) -> list[Prediction]:
+    async def process_recent(self, session: AsyncSession, limit: int = 100) -> list[Prediction]:
         bundle = get_model_registry().get()
         if bundle is None:
             raise AppError("Detection model is not loaded.")

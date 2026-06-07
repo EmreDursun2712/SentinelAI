@@ -68,6 +68,10 @@ seed: ## Train a fresh detection model and restart the backend.
 smoke: ## Run the 11-step end-to-end smoke test against the running stack.
 	bash $(SCRIPTS)/smoke_demo.sh
 
+.PHONY: e2e
+e2e: ## Full E2E gate: up -> train+stage model -> smoke -> down -v (safe teardown).
+	bash $(SCRIPTS)/e2e.sh
+
 .PHONY: demo-seed
 demo-seed: ## Pre-populate the dashboard with alerts, actions, and a report.
 	bash $(SCRIPTS)/demo_seed.sh

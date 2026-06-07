@@ -39,9 +39,7 @@ logger = get_logger(__name__)
 
 
 @router.post("/login", status_code=status.HTTP_200_OK)
-async def login(
-    http_request: Request, session: SessionDep, request: LoginRequest
-) -> TokenResponse:
+async def login(http_request: Request, session: SessionDep, request: LoginRequest) -> TokenResponse:
     # Brute-force guard: limit by IP + username together, before touching the DB.
     # This throttles both password-spraying one account and many-account attempts
     # from a single source.

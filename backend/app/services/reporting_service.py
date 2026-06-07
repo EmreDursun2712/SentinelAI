@@ -187,9 +187,7 @@ async def generate_alert_report(
     return report, packet
 
 
-async def get_latest_alert_report(
-    session: AsyncSession, alert_id: int
-) -> IncidentReport | None:
+async def get_latest_alert_report(session: AsyncSession, alert_id: int) -> IncidentReport | None:
     stmt = (
         select(IncidentReport)
         .where(
@@ -232,17 +230,11 @@ async def generate_daily_summary(
         or 0
     )
 
-    by_severity = await _group_count(
-        session, Alert.severity, period_start, period_end
-    )
+    by_severity = await _group_count(session, Alert.severity, period_start, period_end)
     by_status = await _group_count(session, Alert.status, period_start, period_end)
-    by_disposition = await _group_count(
-        session, Alert.disposition, period_start, period_end
-    )
+    by_disposition = await _group_count(session, Alert.disposition, period_start, period_end)
 
-    top_sources = await _top_n(
-        session, Alert.src_ip, period_start, period_end, key="source_ip"
-    )
+    top_sources = await _top_n(session, Alert.src_ip, period_start, period_end, key="source_ip")
     top_destinations = await _top_n(
         session, Alert.dst_ip, period_start, period_end, key="destination_ip"
     )
@@ -370,9 +362,7 @@ async def _load_decisions(session: AsyncSession, alert_id: int) -> list[AgentDec
     return list((await session.execute(stmt)).scalars().all())
 
 
-async def _load_response_actions(
-    session: AsyncSession, alert_id: int
-) -> list[ResponseAction]:
+async def _load_response_actions(session: AsyncSession, alert_id: int) -> list[ResponseAction]:
     stmt = (
         select(ResponseAction)
         .where(ResponseAction.alert_id == alert_id)
@@ -485,12 +475,8 @@ async def _response_stats(
         )
     ).all()
 
-    by_type = {
-        (v.value if hasattr(v, "value") else str(v)): int(c) for v, c in by_type_rows
-    }
-    by_status = {
-        (v.value if hasattr(v, "value") else str(v)): int(c) for v, c in by_status_rows
-    }
+    by_type = {(v.value if hasattr(v, "value") else str(v)): int(c) for v, c in by_type_rows}
+    by_status = {(v.value if hasattr(v, "value") else str(v)): int(c) for v, c in by_status_rows}
     return total, by_type, by_status
 
 
@@ -518,9 +504,7 @@ async def _latency_stats(
 # ---------------------------------------------------------------------------
 
 
-def _find_decision(
-    decisions: list[AgentDecision], agent: AgentName
-) -> AgentDecision | None:
+def _find_decision(decisions: list[AgentDecision], agent: AgentName) -> AgentDecision | None:
     return next((d for d in decisions if d.agent == agent), None)
 
 
@@ -582,9 +566,7 @@ def _build_detection(
         predicted_label=str(d.get("predicted_label", "")),
         confidence=float(d.get("confidence") or 0.0),
         threshold=(float(r["threshold"]) if r.get("threshold") is not None else None),
-        class_probabilities={
-            k: float(v) for k, v in (r.get("class_probabilities") or {}).items()
-        },
+        class_probabilities={k: float(v) for k, v in (r.get("class_probabilities") or {}).items()},
         model_name=r.get("model_name"),
         model_version=r.get("model_version"),
     )
@@ -597,15 +579,15 @@ def _build_investigation(
         return InvestigationSection(available=False)
 
     feature_importance = [
-        FeatureImportanceItem(feature=fi.get("feature", "?"), importance=float(fi.get("importance", 0.0)))
+        FeatureImportanceItem(
+            feature=fi.get("feature", "?"), importance=float(fi.get("importance", 0.0))
+        )
         for fi in (packet_data.get("feature_importance") or [])
     ]
 
     generated_at_raw = packet_data.get("generated_at")
     try:
-        generated_at = (
-            datetime.fromisoformat(generated_at_raw) if generated_at_raw else None
-        )
+        generated_at = datetime.fromisoformat(generated_at_raw) if generated_at_raw else None
     except (TypeError, ValueError):
         generated_at = None
 
@@ -745,9 +727,7 @@ def _build_response_section(actions: list[ResponseAction]) -> ResponseSection:
     )
 
 
-def _build_analyst_section(
-    alert: Alert, analyst_decisions: list[AgentDecision]
-) -> AnalystSection:
+def _build_analyst_section(alert: Alert, analyst_decisions: list[AgentDecision]) -> AnalystSection:
     entries: list[AnalystEntry] = []
     for d in analyst_decisions:
         dec = d.decision or {}
@@ -824,11 +804,7 @@ def _build_final_summary(
         related = int(stats.get("related_alert_count", 0))
         same_family = int(stats.get("same_family_alert_count", 0))
         if related > 0:
-            extra = (
-                f", {same_family} sharing the same predicted family"
-                if same_family > 0
-                else ""
-            )
+            extra = f", {same_family} sharing the same predicted family" if same_family > 0 else ""
             parts.append(
                 f"Investigation found {related} related alert(s) in the surrounding window{extra}."
             )
@@ -839,17 +815,13 @@ def _build_final_summary(
 
     if response.actions:
         if response.auto_executed > 0:
-            executed_types = sorted({
-                a.action_type.value for a in response.actions if a.executed
-            })
+            executed_types = sorted({a.action_type.value for a in response.actions if a.executed})
             parts.append(
                 f"Response auto-executed **{response.auto_executed}** action(s): "
                 f"{', '.join(executed_types) or '—'}."
             )
         if response.awaiting_approval > 0:
-            parts.append(
-                f"**{response.awaiting_approval}** action(s) await analyst approval."
-            )
+            parts.append(f"**{response.awaiting_approval}** action(s) await analyst approval.")
         if response.rejected > 0:
             parts.append(f"**{response.rejected}** action(s) were rejected.")
     else:
@@ -859,8 +831,7 @@ def _build_final_summary(
         parts.append(f"Analyst recorded {len(analyst_decisions)} action(s).")
 
     parts.append(
-        f"Current state: status `{alert.status.value}`, "
-        f"disposition `{alert.disposition.value}`."
+        f"Current state: status `{alert.status.value}`, disposition `{alert.disposition.value}`."
     )
     return " ".join(parts)
 

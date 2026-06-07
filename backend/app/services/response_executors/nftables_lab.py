@@ -62,7 +62,8 @@ class NftablesLabExecutor(ResponseExecutor):
 
     async def _nft(self, *args: str) -> None:
         proc = await asyncio.create_subprocess_exec(
-            "nft", *args,
+            "nft",
+            *args,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

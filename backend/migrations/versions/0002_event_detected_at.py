@@ -33,7 +33,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index(
-        "ix_network_events_undetected_created_at", table_name="network_events"
-    )
+    op.drop_index("ix_network_events_undetected_created_at", table_name="network_events")
     op.drop_column("network_events", "detected_at")

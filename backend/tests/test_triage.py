@@ -15,7 +15,6 @@ from app.services.triage_rules import (
     volume_score,
 )
 
-
 # ---------- family_weight --------------------------------------------------
 
 
@@ -53,12 +52,12 @@ def test_family_weight_unknown_returns_default() -> None:
 @pytest.mark.parametrize(
     ("port", "expected"),
     [
-        (22, 0.85),    # SSH
+        (22, 0.85),  # SSH
         (3389, 0.90),  # RDP
         (3306, 0.80),  # MySQL
-        (80, 0.45),    # HTTP
-        (443, 0.50),   # HTTPS
-        (53, 0.40),    # DNS
+        (80, 0.45),  # HTTP
+        (443, 0.50),  # HTTPS
+        (53, 0.40),  # DNS
     ],
 )
 def test_port_criticality_known(port: int, expected: float) -> None:

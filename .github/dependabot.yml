@@ -1,0 +1,62 @@
+version: 2
+
+updates:
+  # ---- Python: backend ----
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "backend"]
+    groups:
+      python-backend:
+        patterns: ["*"]
+
+  # ---- Python: ML pipeline ----
+  - package-ecosystem: pip
+    directory: /ml
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "ml"]
+    groups:
+      python-ml:
+        patterns: ["*"]
+
+  # ---- Python: sensor ----
+  - package-ecosystem: pip
+    directory: /sensor
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "sensor"]
+    groups:
+      python-sensor:
+        patterns: ["*"]
+
+  # ---- Frontend: npm ----
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "frontend"]
+    groups:
+      npm-frontend:
+        patterns: ["*"]
+
+  # ---- GitHub Actions ----
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "ci"]
+    groups:
+      github-actions:
+        patterns: ["*"]

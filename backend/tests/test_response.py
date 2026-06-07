@@ -170,8 +170,7 @@ def test_low_high_confidence_just_notifies() -> None:
 def test_suppress_requires_approval() -> None:
     alert = _alert(severity=Severity.LOW, prediction="PortScan", confidence=0.3)
     suppress = next(
-        r for r in recommend_actions(alert)
-        if r.action_type == ResponseActionType.SUPPRESS_ALERT
+        r for r in recommend_actions(alert) if r.action_type == ResponseActionType.SUPPRESS_ALERT
     )
     # Disposition-changing action — always behind analyst sign-off.
     assert suppress.auto_execute is False

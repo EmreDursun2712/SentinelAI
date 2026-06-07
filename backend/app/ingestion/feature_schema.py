@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from typing import Final
 
-
 # Maps lower-cased, single-space-collapsed CSV headers to canonical keys.
 # Anything not present here is normalized to snake_case and dropped into `features`.
 COLUMN_ALIASES: Final[dict[str, str]] = {

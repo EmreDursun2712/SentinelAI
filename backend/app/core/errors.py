@@ -109,9 +109,7 @@ async def _handle_app_error(request: Request, exc: AppError) -> JSONResponse:
     )
 
 
-async def _handle_http_exception(
-    request: Request, exc: StarletteHTTPException
-) -> JSONResponse:
+async def _handle_http_exception(request: Request, exc: StarletteHTTPException) -> JSONResponse:
     detail = exc.detail
     message = detail if isinstance(detail, str) else "HTTP error."
     details = None if isinstance(detail, str) else detail
@@ -126,9 +124,7 @@ async def _handle_http_exception(
     )
 
 
-async def _handle_validation_error(
-    request: Request, exc: RequestValidationError
-) -> JSONResponse:
+async def _handle_validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content=_envelope(

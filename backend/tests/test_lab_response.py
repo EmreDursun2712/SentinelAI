@@ -95,7 +95,9 @@ def test_validate_in_cidrs() -> None:
 def test_lab_inactive_by_default() -> None:
     assert _simulated_settings().lab_response_active is False
     # Even enabled but missing pieces → inactive.
-    assert _simulated_settings(response_enabled=True, response_mode="lab").lab_response_active is False
+    assert (
+        _simulated_settings(response_enabled=True, response_mode="lab").lab_response_active is False
+    )
     assert _lab_settings(response_allowed_cidrs="").lab_response_active is False
     assert _lab_settings(response_executor="simulated").lab_response_active is False
     assert _lab_settings().lab_response_active is True
@@ -203,9 +205,7 @@ async def test_mock_lab_rollback() -> None:
 
 
 async def test_rollback_action_rejects_when_not_available() -> None:
-    action = SimpleNamespace(
-        id=1, rollback_status=RollbackStatus.NOT_REQUIRED, alert_id=1
-    )
+    action = SimpleNamespace(id=1, rollback_status=RollbackStatus.NOT_REQUIRED, alert_id=1)
     with pytest.raises(AppError):
         await rollback_action(object(), action)  # type: ignore[arg-type]
 

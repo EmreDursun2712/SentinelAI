@@ -54,6 +54,4 @@ class ResponseAgent(Agent):
         reason: str,
         analyst_id: str | None = None,
     ) -> ResponseAction:
-        return await reject_action(
-            session, action, reason=reason, analyst_id=analyst_id
-        )
+        return await reject_action(session, action, reason=reason, analyst_id=analyst_id)

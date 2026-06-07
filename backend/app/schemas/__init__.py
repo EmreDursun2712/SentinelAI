@@ -16,8 +16,8 @@ from app.schemas.alert import (
 from app.schemas.detection import (
     BatchEventRequest,
     ModelInfoOut,
-    PredictRequest,
     PredictionOut,
+    PredictRequest,
     RunRequest,
     RunSummary,
 )
@@ -68,9 +68,9 @@ __all__ = [
     "BatchEventRequest",
     "CloseAlertRequest",
     "DailySummaryEnvelope",
-    "DashboardOverviewOut",
     "DailySummaryPacket",
     "DailySummaryRequest",
+    "DashboardOverviewOut",
     "FeatureImportanceItem",
     "FlowRecordIn",
     "FlowRecordOut",

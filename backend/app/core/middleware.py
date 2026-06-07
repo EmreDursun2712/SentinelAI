@@ -15,9 +15,7 @@ REQUEST_ID_HEADER = "x-request-id"
 class RequestIdMiddleware(BaseHTTPMiddleware):
     """Stamp every request and every log line with a stable request_id."""
 
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         incoming = request.headers.get(REQUEST_ID_HEADER)
         request_id = incoming or uuid.uuid4().hex
         request.state.request_id = request_id

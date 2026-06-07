@@ -14,9 +14,7 @@ from sklearn.metrics import (
 )
 
 
-def compute_metrics(
-    y_true: np.ndarray, y_pred: np.ndarray, classes: list[str]
-) -> dict[str, Any]:
+def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray, classes: list[str]) -> dict[str, Any]:
     """Return a JSON-friendly dict of scalar + per-class metrics."""
     labels = list(range(len(classes)))
     report = classification_report(
@@ -29,22 +27,14 @@ def compute_metrics(
     )
 
     return {
-        "precision_macro": float(
-            precision_score(y_true, y_pred, average="macro", zero_division=0)
-        ),
-        "recall_macro": float(
-            recall_score(y_true, y_pred, average="macro", zero_division=0)
-        ),
+        "precision_macro": float(precision_score(y_true, y_pred, average="macro", zero_division=0)),
+        "recall_macro": float(recall_score(y_true, y_pred, average="macro", zero_division=0)),
         "f1_macro": float(f1_score(y_true, y_pred, average="macro", zero_division=0)),
         "precision_weighted": float(
             precision_score(y_true, y_pred, average="weighted", zero_division=0)
         ),
-        "recall_weighted": float(
-            recall_score(y_true, y_pred, average="weighted", zero_division=0)
-        ),
-        "f1_weighted": float(
-            f1_score(y_true, y_pred, average="weighted", zero_division=0)
-        ),
+        "recall_weighted": float(recall_score(y_true, y_pred, average="weighted", zero_division=0)),
+        "f1_weighted": float(f1_score(y_true, y_pred, average="weighted", zero_division=0)),
         "accuracy": float(np.mean(np.asarray(y_true) == np.asarray(y_pred))),
         "support": int(len(y_true)),
         "per_class": _strip_numpy(report),

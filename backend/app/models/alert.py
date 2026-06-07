@@ -17,7 +17,6 @@ from sqlalchemy import (
     BigInteger,
     CheckConstraint,
     DateTime,
-    Enum as SAEnum,
     Float,
     ForeignKey,
     Index,
@@ -25,6 +24,9 @@ from sqlalchemy import (
     String,
     Text,
     text,
+)
+from sqlalchemy import (
+    Enum as SAEnum,
 )
 from sqlalchemy.dialects.postgresql import INET
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -110,19 +112,19 @@ class Alert(TimestampMixin, Base):
     reported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    event: Mapped["NetworkEvent | None"] = relationship(back_populates="alerts")
-    model_version: Mapped["ModelVersion | None"] = relationship(back_populates="alerts")
-    artifacts: Mapped[list["AlertArtifact"]] = relationship(
+    event: Mapped[NetworkEvent | None] = relationship(back_populates="alerts")
+    model_version: Mapped[ModelVersion | None] = relationship(back_populates="alerts")
+    artifacts: Mapped[list[AlertArtifact]] = relationship(
         back_populates="alert", cascade="all, delete-orphan"
     )
-    decisions: Mapped[list["AgentDecision"]] = relationship(
+    decisions: Mapped[list[AgentDecision]] = relationship(
         back_populates="alert",
         cascade="all, delete-orphan",
         order_by="AgentDecision.created_at",
     )
-    actions: Mapped[list["ResponseAction"]] = relationship(
+    actions: Mapped[list[ResponseAction]] = relationship(
         back_populates="alert",
         cascade="all, delete-orphan",
         order_by="ResponseAction.created_at",
     )
-    reports: Mapped[list["IncidentReport"]] = relationship(back_populates="alert")
+    reports: Mapped[list[IncidentReport]] = relationship(back_populates="alert")

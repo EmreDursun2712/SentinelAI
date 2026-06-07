@@ -120,9 +120,7 @@ def distribution_psi(
     Returns ``(psi, recent_proportions)`` over the union of categories.
     """
     total = sum(recent_counts.values())
-    recent_props = (
-        {k: v / total for k, v in recent_counts.items()} if total else {}
-    )
+    recent_props = {k: v / total for k, v in recent_counts.items()} if total else {}
     categories = set(baseline_dist) | set(recent_props)
     expected = [baseline_dist.get(c, 0.0) for c in categories]
     actual = [recent_props.get(c, 0.0) for c in categories]
@@ -180,9 +178,7 @@ class DriftRunResult:
 # ---------------------------------------------------------------------------
 
 
-async def _resolve_model_version_id(
-    session: AsyncSession, bundle: ModelBundle
-) -> int | None:
+async def _resolve_model_version_id(session: AsyncSession, bundle: ModelBundle) -> int | None:
     """Look up the persisted model_versions id by name+version.
 
     We deliberately re-query rather than trust ``bundle.db_id``: that cache can
@@ -232,7 +228,9 @@ async def run_drift_check(
                 .order_by(desc(NetworkEvent.created_at))
                 .limit(MAX_EVENTS)
             )
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
     )
     recent_values: dict[str, list[float]] = {f: [] for f in baseline_features}
     for ev in events:
@@ -244,11 +242,9 @@ async def run_drift_check(
 
     # Recent alerts → prediction mix + confidence.
     alerts = list(
-        (
-            await session.execute(
-                select(Alert).where(Alert.created_at >= window_start)
-            )
-        ).scalars().all()
+        (await session.execute(select(Alert).where(Alert.created_at >= window_start)))
+        .scalars()
+        .all()
     )
 
     if not events and not alerts:
@@ -262,9 +258,7 @@ async def run_drift_check(
     base_classes = baseline.get("class_distribution") or {}
     base_nonbenign = {k: v for k, v in base_classes.items() if k != benign}
     nb_total = sum(base_nonbenign.values())
-    base_nonbenign = (
-        {k: v / nb_total for k, v in base_nonbenign.items()} if nb_total else {}
-    )
+    base_nonbenign = {k: v / nb_total for k, v in base_nonbenign.items()} if nb_total else {}
 
     pred_counts: dict[str, int] = {}
     confidences: list[float] = []
@@ -321,16 +315,12 @@ async def run_drift_check(
 async def get_latest_snapshot(session: AsyncSession) -> ModelDriftSnapshot | None:
     return (
         await session.execute(
-            select(ModelDriftSnapshot)
-            .order_by(desc(ModelDriftSnapshot.created_at))
-            .limit(1)
+            select(ModelDriftSnapshot).order_by(desc(ModelDriftSnapshot.created_at)).limit(1)
         )
     ).scalar_one_or_none()
 
 
-async def list_snapshots(
-    session: AsyncSession, *, limit: int = 20
-) -> list[ModelDriftSnapshot]:
+async def list_snapshots(session: AsyncSession, *, limit: int = 20) -> list[ModelDriftSnapshot]:
     return list(
         (
             await session.execute(
@@ -338,5 +328,7 @@ async def list_snapshots(
                 .order_by(desc(ModelDriftSnapshot.created_at))
                 .limit(limit)
             )
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
     )

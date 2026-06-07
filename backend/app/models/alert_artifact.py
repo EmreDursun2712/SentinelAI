@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import BigInteger, Enum as SAEnum, ForeignKey, Index, Text, text
+from sqlalchemy import BigInteger, ForeignKey, Index, Text, text
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -18,9 +19,7 @@ if TYPE_CHECKING:
 
 class AlertArtifact(CreatedAtMixin, Base):
     __tablename__ = "alert_artifacts"
-    __table_args__ = (
-        Index("ix_alert_artifacts_alert_id_kind", "alert_id", "kind"),
-    )
+    __table_args__ = (Index("ix_alert_artifacts_alert_id_kind", "alert_id", "kind"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     alert_id: Mapped[int] = mapped_column(
@@ -37,4 +36,4 @@ class AlertArtifact(CreatedAtMixin, Base):
     )
     file_path: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    alert: Mapped["Alert"] = relationship(back_populates="artifacts")
+    alert: Mapped[Alert] = relationship(back_populates="artifacts")

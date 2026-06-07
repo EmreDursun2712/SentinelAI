@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date as date_t, datetime
+from datetime import UTC, datetime
+from datetime import date as date_t
 from types import SimpleNamespace
 
 from app.models.enums import (
@@ -47,7 +48,6 @@ from app.services.reporting_service import (
     _format_analyst_summary,
 )
 
-
 T0 = datetime(2026, 5, 21, 8, 25, 42, tzinfo=UTC)
 
 
@@ -66,11 +66,18 @@ def test_md_cell_escapes_pipes_and_newlines() -> None:
 
 def _alert(**ov):
     base = dict(
-        id=42, src_ip="203.0.113.7", dst_ip="10.0.0.10",
-        src_port=38821, dst_port=22, protocol="TCP",
-        prediction="BruteForce", confidence=0.92,
-        severity=Severity.HIGH, priority=67.0,
-        status=AlertStatus.INVESTIGATED, disposition=AlertDisposition.UNDER_REVIEW,
+        id=42,
+        src_ip="203.0.113.7",
+        dst_ip="10.0.0.10",
+        src_port=38821,
+        dst_port=22,
+        protocol="TCP",
+        prediction="BruteForce",
+        confidence=0.92,
+        severity=Severity.HIGH,
+        priority=67.0,
+        status=AlertStatus.INVESTIGATED,
+        disposition=AlertDisposition.UNDER_REVIEW,
         model_version_id=1,
         created_at=T0,
         triaged_at=datetime(2026, 5, 21, 8, 25, 43, tzinfo=UTC),
@@ -79,17 +86,21 @@ def _alert(**ov):
         reported_at=None,
         closed_at=None,
     )
-    base.update(ov); return SimpleNamespace(**base)
+    base.update(ov)
+    return SimpleNamespace(**base)
 
 
 def _detection_decision():
     return SimpleNamespace(
-        id=1, agent=AgentName.DETECTION,
+        id=1,
+        agent=AgentName.DETECTION,
         decision={"predicted_label": "BruteForce", "confidence": 0.92},
         reasoning={
             "class_probabilities": {"BruteForce": 0.92, "BENIGN": 0.05, "PortScan": 0.03},
-            "model_name": "sentinelai-detection", "model_version": "v20260521-073940",
-            "threshold": 0.5, "benign_label": "BENIGN",
+            "model_name": "sentinelai-detection",
+            "model_version": "v20260521-073940",
+            "threshold": 0.5,
+            "benign_label": "BENIGN",
         },
         created_at=T0,
     )
@@ -97,13 +108,17 @@ def _detection_decision():
 
 def _triage_decision():
     return SimpleNamespace(
-        id=2, agent=AgentName.TRIAGE,
+        id=2,
+        agent=AgentName.TRIAGE,
         decision={"severity": "HIGH", "priority": 67.0, "recent_count": 3},
         reasoning={
             "factors": {
-                "family": "BruteForce", "family_score": 0.70,
+                "family": "BruteForce",
+                "family_score": 0.70,
                 "confidence_score": 0.92,
-                "dst_port": 22, "port_score": 0.85, "volume_score": 0.10,
+                "dst_port": 22,
+                "port_score": 0.85,
+                "volume_score": 0.10,
             },
             "component_weights": {"family": 0.40, "confidence": 0.30, "port": 0.20, "volume": 0.10},
             "explanations": ["family=BruteForce → criticality 0.70 × 40%"],
@@ -115,9 +130,14 @@ def _triage_decision():
 
 def _response_decision():
     return SimpleNamespace(
-        id=3, agent=AgentName.RESPONSE,
-        decision={"n_recommendations": 3, "n_auto_executed": 3, "n_awaiting_approval": 0,
-                  "action_ids": [10, 11, 12]},
+        id=3,
+        agent=AgentName.RESPONSE,
+        decision={
+            "n_recommendations": 3,
+            "n_auto_executed": 3,
+            "n_awaiting_approval": 0,
+            "action_ids": [10, 11, 12],
+        },
         reasoning={"recommendations": []},
         created_at=datetime(2026, 5, 21, 8, 25, 44, tzinfo=UTC),
     )
@@ -125,21 +145,35 @@ def _response_decision():
 
 def _analyst_decision(**ov):
     base = dict(
-        id=4, agent=AgentName.ANALYST,
+        id=4,
+        agent=AgentName.ANALYST,
         decision={"verb": "approve", "action_id": 10, "action_type": "BLOCK_IP"},
         reasoning={"analyst_id": "alice", "note": "Confirmed: brute-force pattern"},
         created_at=datetime(2026, 5, 21, 9, 5, 0, tzinfo=UTC),
     )
-    base.update(ov); return SimpleNamespace(**base)
+    base.update(ov)
+    return SimpleNamespace(**base)
 
 
-def _action(action_id, action_type, *, approval_required=False, executed=True,
-            stat=ResponseStatus.EXECUTED, rationale="test rationale"):
+def _action(
+    action_id,
+    action_type,
+    *,
+    approval_required=False,
+    executed=True,
+    stat=ResponseStatus.EXECUTED,
+    rationale="test rationale",
+):
     return SimpleNamespace(
-        id=action_id, alert_id=42,
-        action_type=action_type, simulated=True, status=stat,
-        executed=executed, approval_required=approval_required,
-        approved_by=None, rejection_reason=None,
+        id=action_id,
+        alert_id=42,
+        action_type=action_type,
+        simulated=True,
+        status=stat,
+        executed=executed,
+        approval_required=approval_required,
+        approved_by=None,
+        rejection_reason=None,
         payload={"rationale": rationale, "target_ip": "203.0.113.7"},
         executed_at=datetime(2026, 5, 21, 8, 25, 44, tzinfo=UTC) if executed else None,
         created_at=datetime(2026, 5, 21, 8, 25, 44, tzinfo=UTC),
@@ -223,10 +257,20 @@ def test_build_response_section_classifies_actions() -> None:
     actions = [
         _action(10, ResponseActionType.BLOCK_IP),
         _action(11, ResponseActionType.NOTIFY_ANALYST),
-        _action(12, ResponseActionType.SUPPRESS_ALERT, approval_required=True,
-                executed=False, stat=ResponseStatus.PENDING),
-        _action(13, ResponseActionType.RATE_LIMIT, approval_required=True,
-                executed=False, stat=ResponseStatus.REJECTED),
+        _action(
+            12,
+            ResponseActionType.SUPPRESS_ALERT,
+            approval_required=True,
+            executed=False,
+            stat=ResponseStatus.PENDING,
+        ),
+        _action(
+            13,
+            ResponseActionType.RATE_LIMIT,
+            approval_required=True,
+            executed=False,
+            stat=ResponseStatus.REJECTED,
+        ),
     ]
     section = _build_response_section(actions)
     assert section.auto_executed == 2  # BLOCK_IP + NOTIFY_ANALYST
@@ -269,10 +313,18 @@ def test_format_analyst_summary_approve_with_note() -> None:
 def test_build_timeline_uses_investigation_packet_when_present() -> None:
     packet = {
         "timeline": [
-            {"timestamp": T0.isoformat(), "kind": "event",
-             "summary": "Flow", "is_current_alert": False},
-            {"timestamp": (T0).isoformat(), "kind": "alert",
-             "summary": "This alert", "is_current_alert": True},
+            {
+                "timestamp": T0.isoformat(),
+                "kind": "event",
+                "summary": "Flow",
+                "is_current_alert": False,
+            },
+            {
+                "timestamp": (T0).isoformat(),
+                "kind": "alert",
+                "summary": "This alert",
+                "is_current_alert": True,
+            },
         ]
     }
     decisions = [_detection_decision(), _triage_decision(), _response_decision()]
@@ -299,13 +351,17 @@ def test_build_timeline_synthesizes_when_no_packet() -> None:
 def test_final_summary_combines_all_stages() -> None:
     alert = _alert()
     detection = _build_detection(_detection_decision())
-    investigation = _build_investigation({
-        "statistics": {"related_alert_count": 5, "same_family_alert_count": 4},
-    })
-    response = _build_response_section([
-        _action(10, ResponseActionType.BLOCK_IP),
-        _action(11, ResponseActionType.CREATE_TICKET),
-    ])
+    investigation = _build_investigation(
+        {
+            "statistics": {"related_alert_count": 5, "same_family_alert_count": 4},
+        }
+    )
+    response = _build_response_section(
+        [
+            _action(10, ResponseActionType.BLOCK_IP),
+            _action(11, ResponseActionType.CREATE_TICKET),
+        ]
+    )
     text = _build_final_summary(
         alert, detection, _triage_decision(), investigation, response, [_analyst_decision()]
     )
@@ -336,25 +392,39 @@ def test_final_summary_handles_missing_pieces_gracefully() -> None:
 def _full_packet() -> AlertReportPacket:
     """Hand-build a fully-populated AlertReportPacket for rendering tests."""
     overview = OverviewSection(
-        alert_id=42, created_at=T0,
-        src_ip="203.0.113.7", src_port=38821,
-        dst_ip="10.0.0.10", dst_port=22, protocol="TCP",
+        alert_id=42,
+        created_at=T0,
+        src_ip="203.0.113.7",
+        src_port=38821,
+        dst_ip="10.0.0.10",
+        dst_port=22,
+        protocol="TCP",
         prediction="BruteForce",
-        model_name="sentinelai-detection", model_version="v20260521-073940",
+        model_name="sentinelai-detection",
+        model_version="v20260521-073940",
     )
     severity_priority = SeverityPrioritySection(
-        severity=Severity.HIGH, priority=67.0,
-        factors=TriageFactors(family="BruteForce", family_score=0.70,
-                              confidence_score=0.92, dst_port=22,
-                              port_score=0.85, volume_score=0.10),
+        severity=Severity.HIGH,
+        priority=67.0,
+        factors=TriageFactors(
+            family="BruteForce",
+            family_score=0.70,
+            confidence_score=0.92,
+            dst_port=22,
+            port_score=0.85,
+            volume_score=0.10,
+        ),
         component_weights={"family": 0.40, "confidence": 0.30, "port": 0.20, "volume": 0.10},
         explanations=["family=BruteForce → criticality 0.70 × 40%"],
         triaged_at=T0,
     )
     detection = DetectionSection(
-        predicted_label="BruteForce", confidence=0.92, threshold=0.5,
+        predicted_label="BruteForce",
+        confidence=0.92,
+        threshold=0.5,
         class_probabilities={"BruteForce": 0.92, "BENIGN": 0.05, "PortScan": 0.03},
-        model_name="sentinelai-detection", model_version="v20260521-073940",
+        model_name="sentinelai-detection",
+        model_version="v20260521-073940",
     )
     investigation = InvestigationSection(
         available=True,
@@ -364,36 +434,59 @@ def _full_packet() -> AlertReportPacket:
         feature_importance=[FeatureImportanceItem(feature="flow_bytes/s", importance=0.18)],
         generated_at=T0,
     )
-    timeline = TimelineSection(items=[
-        TimelineRow(timestamp=T0, kind="event", summary="Flow"),
-        TimelineRow(timestamp=T0, kind="alert", summary="This alert", is_current_alert=True),
-    ])
+    timeline = TimelineSection(
+        items=[
+            TimelineRow(timestamp=T0, kind="event", summary="Flow"),
+            TimelineRow(timestamp=T0, kind="alert", summary="This alert", is_current_alert=True),
+        ]
+    )
     response = ResponseSection(
-        actions=[ResponseActionRow(
-            id=10, action_type=ResponseActionType.BLOCK_IP, status=ResponseStatus.EXECUTED,
-            approval_required=False, executed=True,
-            rationale="HIGH BruteForce — auto-block source IP.",
-            payload={"target_ip": "203.0.113.7"},
-            executed_at=T0, created_at=T0,
-        )],
+        actions=[
+            ResponseActionRow(
+                id=10,
+                action_type=ResponseActionType.BLOCK_IP,
+                status=ResponseStatus.EXECUTED,
+                approval_required=False,
+                executed=True,
+                rationale="HIGH BruteForce — auto-block source IP.",
+                payload={"target_ip": "203.0.113.7"},
+                executed_at=T0,
+                created_at=T0,
+            )
+        ],
         counts_by_status={"EXECUTED": 1},
-        auto_executed=1, awaiting_approval=0, rejected=0,
+        auto_executed=1,
+        awaiting_approval=0,
+        rejected=0,
     )
     analyst = AnalystSection(
-        status=AlertStatus.INVESTIGATED, disposition=AlertDisposition.UNDER_REVIEW,
-        entries=[AnalystEntry(timestamp=T0, analyst_id="alice", verb="approve",
-                              target="BLOCK_IP", note="Confirmed",
-                              detail="APPROVE on BLOCK_IP — “Confirmed”")],
+        status=AlertStatus.INVESTIGATED,
+        disposition=AlertDisposition.UNDER_REVIEW,
+        entries=[
+            AnalystEntry(
+                timestamp=T0,
+                analyst_id="alice",
+                verb="approve",
+                target="BLOCK_IP",
+                note="Confirmed",
+                detail="APPROVE on BLOCK_IP — “Confirmed”",
+            )
+        ],
     )
     return AlertReportPacket(
-        alert_id=42, kind=IncidentKind.PER_ALERT,
+        alert_id=42,
+        kind=IncidentKind.PER_ALERT,
         title="Incident Report — Alert #42 (BruteForce)",
         generated_at=T0,
         workflow_status=AlertStatus.INVESTIGATED,
         disposition=AlertDisposition.UNDER_REVIEW,
-        overview=overview, severity_priority=severity_priority,
-        detection=detection, investigation=investigation,
-        timeline=timeline, response=response, analyst=analyst,
+        overview=overview,
+        severity_priority=severity_priority,
+        detection=detection,
+        investigation=investigation,
+        timeline=timeline,
+        response=response,
+        analyst=analyst,
         final_summary="Alert #42 was a HIGH BruteForce…",
         markdown="",
     )

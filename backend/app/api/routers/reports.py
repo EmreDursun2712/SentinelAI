@@ -39,9 +39,7 @@ async def list_reports_endpoint(
     limit: Annotated[int, Query(ge=1, le=500)] = 50,
     offset: Annotated[int, Query(ge=0, le=100_000)] = 0,
 ) -> list[IncidentReportOut]:
-    rows = await list_reports(
-        session, kind=kind, alert_id=alert_id, limit=limit, offset=offset
-    )
+    rows = await list_reports(session, kind=kind, alert_id=alert_id, limit=limit, offset=offset)
     return [IncidentReportOut.model_validate(r) for r in rows]
 
 

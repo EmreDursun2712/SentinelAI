@@ -113,7 +113,7 @@ class AlertTimeseriesPoint(BaseModel):
 
 
 class AlertTimeseriesOut(BaseModel):
-    bucket: str          # currently "hour"
+    bucket: str  # currently "hour"
     period_hours: int
     points: list[AlertTimeseriesPoint] = Field(default_factory=list)
 

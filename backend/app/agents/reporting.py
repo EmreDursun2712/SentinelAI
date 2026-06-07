@@ -42,7 +42,5 @@ class ReportingAgent(Agent):
     ) -> tuple[IncidentReport, DailySummaryPacket]:
         return await generate_daily_summary(session, target_date, commit=commit)
 
-    async def latest_for_alert(
-        self, session: AsyncSession, alert_id: int
-    ) -> IncidentReport | None:
+    async def latest_for_alert(self, session: AsyncSession, alert_id: int) -> IncidentReport | None:
         return await get_latest_alert_report(session, alert_id)

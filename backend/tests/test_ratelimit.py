@@ -190,9 +190,7 @@ async def test_authenticated_expensive_endpoint_is_limited(client: AsyncClient) 
 
     async def _post() -> int:
         try:
-            resp = await client.post(
-                "/api/v1/detection/predict", json=body, headers=headers
-            )
+            resp = await client.post("/api/v1/detection/predict", json=body, headers=headers)
             return resp.status_code
         except Exception:
             return 0  # handler blew up after passing auth + rate limit

@@ -15,7 +15,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.models.enums import Severity
 from app.schemas.common import IpString
 
-
 # ---------- request / config ----------------------------------------------
 
 

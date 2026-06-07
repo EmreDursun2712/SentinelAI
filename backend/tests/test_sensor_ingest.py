@@ -93,9 +93,7 @@ async def test_batch_ingest_inserts_flows(
     app.dependency_overrides.clear()
 
 
-async def test_batch_rejects_invalid_flow(
-    app: FastAPI, client: AsyncClient
-) -> None:
+async def test_batch_rejects_invalid_flow(app: FastAPI, client: AsyncClient) -> None:
     app.dependency_overrides[db_session] = _dummy_session
     bad = _flow() | {"src_ip": "not-an-ip"}
     resp = await client.post(
@@ -122,9 +120,7 @@ async def test_sensor_status_serializes(
         }
 
     monkeypatch.setattr(ingest_router, "sensor_status", fake_status)
-    resp = await client.get(
-        "/api/v1/ingest/sensor/status", headers=_headers(Role.VIEWER)
-    )
+    resp = await client.get("/api/v1/ingest/sensor/status", headers=_headers(Role.VIEWER))
     assert resp.status_code == 200
     body = resp.json()
     assert body["live"] is True

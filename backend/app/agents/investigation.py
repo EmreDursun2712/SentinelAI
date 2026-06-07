@@ -46,7 +46,5 @@ class InvestigationAgent(Agent):
             commit=commit,
         )
 
-    async def latest_packet(
-        self, session: AsyncSession, alert_id: int
-    ) -> AlertArtifact | None:
+    async def latest_packet(self, session: AsyncSession, alert_id: int) -> AlertArtifact | None:
         return await get_latest_investigation(session, alert_id)

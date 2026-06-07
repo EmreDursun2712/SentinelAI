@@ -53,11 +53,7 @@ def compute_baseline(
     """Build the baseline payload from the training feature matrix + labels."""
     features: dict[str, Any] = {}
     for col in X.columns:
-        series = (
-            pd.to_numeric(X[col], errors="coerce")
-            .replace([np.inf, -np.inf], np.nan)
-            .dropna()
-        )
+        series = pd.to_numeric(X[col], errors="coerce").replace([np.inf, -np.inf], np.nan).dropna()
         if series.empty:
             continue
         edges = np.unique(np.quantile(series.to_numpy(), np.linspace(0, 1, n_bins + 1)))

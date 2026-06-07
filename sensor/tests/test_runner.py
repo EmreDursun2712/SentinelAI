@@ -62,7 +62,6 @@ def test_pump_drops_out_of_scope_flows() -> None:
 
 def test_pump_flushes_partial_batch_on_interval() -> None:
     client = FakeClient()
-    clock = {"t": 0.0}
     cfg = _cfg(batch_size=100, interval_seconds=2.0)
     records = [
         {"src_ip": "192.168.1.1", "dst_ip": "8.8.8.8"},

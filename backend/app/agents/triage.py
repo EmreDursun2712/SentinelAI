@@ -31,6 +31,4 @@ class TriageAgent(Agent):
         window_minutes: int = 15,
         commit: bool = True,
     ) -> TriageScore:
-        return await triage_alert(
-            session, alert, window_minutes=window_minutes, commit=commit
-        )
+        return await triage_alert(session, alert, window_minutes=window_minutes, commit=commit)

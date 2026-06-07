@@ -36,7 +36,10 @@ def upgrade() -> None:
         sa.Column("window_end", sa.DateTime(timezone=True), nullable=False),
         sa.Column("sample_count", sa.Integer(), nullable=False, server_default="0"),
         sa.Column(
-            "feature_drift", postgresql.JSONB(), nullable=False, server_default=sa.text("'{}'::jsonb")
+            "feature_drift",
+            postgresql.JSONB(),
+            nullable=False,
+            server_default=sa.text("'{}'::jsonb"),
         ),
         sa.Column(
             "prediction_distribution",
@@ -75,7 +78,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_index("ix_model_drift_snapshots_created_at", table_name="model_drift_snapshots")
-    op.drop_index(
-        "ix_model_drift_snapshots_model_version_id", table_name="model_drift_snapshots"
-    )
+    op.drop_index("ix_model_drift_snapshots_model_version_id", table_name="model_drift_snapshots")
     op.drop_table("model_drift_snapshots")

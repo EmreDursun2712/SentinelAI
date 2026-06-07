@@ -147,9 +147,7 @@ async def test_convenience_guards() -> None:
         ("DELETE", Role.ADMIN, True),
     ],
 )
-async def test_enforce_rbac_method_policy(
-    method: str, role: Role, allowed: bool
-) -> None:
+async def test_enforce_rbac_method_policy(method: str, role: Role, allowed: bool) -> None:
     request = SimpleNamespace(method=method)
     principal = AuthPrincipal("u", role)
     if allowed:
@@ -225,9 +223,7 @@ async def test_login_success_issues_token(
 
     monkeypatch.setattr(user_service, "authenticate", fake_auth)
 
-    resp = await client.post(
-        "/api/v1/auth/login", json={"username": "alice", "password": "pw"}
-    )
+    resp = await client.post("/api/v1/auth/login", json={"username": "alice", "password": "pw"})
     assert resp.status_code == 200
     body = resp.json()
     assert body["token_type"] == "bearer"
@@ -248,9 +244,7 @@ async def test_login_failure_is_401(
 
     monkeypatch.setattr(user_service, "authenticate", fake_auth)
 
-    resp = await client.post(
-        "/api/v1/auth/login", json={"username": "x", "password": "y"}
-    )
+    resp = await client.post("/api/v1/auth/login", json={"username": "x", "password": "y"})
     assert resp.status_code == 401
     assert resp.json()["error"]["code"] == "unauthorized"
 
