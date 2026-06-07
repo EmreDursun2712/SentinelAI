@@ -145,8 +145,14 @@ Every non-2xx response has this shape:
 | GET    | `/api/v1/response/pending`            | Pending response actions (Response Center queue) |
 | GET    | `/api/v1/response/{id}`               | Single response-action detail                 |
 | POST   | `/api/v1/response/recommend/{alert_id}` | Manually generate recommendations            |
-| POST   | `/api/v1/response/{id}/approve`       | Simulate-execute the action; body `{analyst_id?, note?}` |
+| POST   | `/api/v1/response/{id}/approve`       | Execute the action (simulated, or lab via executor); body `{analyst_id?, note?}` |
 | POST   | `/api/v1/response/{id}/reject`        | Reject; body `{reason, analyst_id?}`          |
+| POST   | `/api/v1/response/{id}/rollback`      | Revert an executed LAB action (ANALYST+); body `{analyst_id?, note?}`. See [LAB_RESPONSE.md](LAB_RESPONSE.md) |
+
+Response actions expose `execution_mode` (`SIMULATED`\|`LAB`), `simulated`,
+`executor_name`, `external_execution_id`, `expires_at`, `rollback_status`, and
+`execution_error`. Default is fully simulated; a real (non-simulated) action is
+only possible in explicit, gated LAB mode.
 | GET    | `/api/v1/reports`                     | List reports. Filters: `kind`, `alert_id`     |
 | GET    | `/api/v1/reports/{id}`                | Return the full packet (structured + markdown) |
 | GET    | `/api/v1/reports/{id}/markdown`       | Raw markdown (`text/markdown`)                |
@@ -154,13 +160,18 @@ Every non-2xx response has this shape:
 | POST   | `/api/v1/ingest/upload`               | Multipart CSV upload; returns ingestion summary |
 | POST   | `/api/v1/ingest/replay`               | Ingest a CSV from the server-side data dir    |
 | POST   | `/api/v1/ingest/flow`                 | Ingest a single flow record (JSON)            |
+| POST   | `/api/v1/ingest/flows`                | Batch ingest from the live sensor; body `{flows:[…]}` (≤1000). See [LIVE_SENSOR.md](LIVE_SENSOR.md) |
 | GET    | `/api/v1/ingest/jobs`                 | List ingestion jobs                           |
 | GET    | `/api/v1/ingest/jobs/{id}`            | Single ingestion job detail                   |
+| GET    | `/api/v1/ingest/sensor/status`        | Live-sensor liveness proxy (recent ingest activity) |
 | GET    | `/api/v1/detection/model`             | Currently loaded ML bundle info               |
 | POST   | `/api/v1/detection/predict`           | Inference on raw flows (no persistence)       |
 | POST   | `/api/v1/detection/events/{id}`       | Detect a stored event; persists alert         |
 | POST   | `/api/v1/detection/batch`             | Detect a list of event_ids; persists          |
 | POST   | `/api/v1/detection/run`               | Process recent un-detected events             |
+| GET    | `/api/v1/detection/drift/latest`      | Latest model-drift snapshot. See [MODEL_DRIFT.md](MODEL_DRIFT.md) |
+| GET    | `/api/v1/detection/drift/history`     | Recent drift snapshots (`?limit=`)            |
+| POST   | `/api/v1/detection/drift/run`         | Compute + persist a drift snapshot (ANALYST+) |
 | WS     | `/api/v1/stream`                      | Authenticated live event stream (see below)   |
 
 See [INGESTION.md](INGESTION.md) for the CSV schema, [DETECTION.md](DETECTION.md) for the inference flow, [TRIAGE.md](TRIAGE.md) for severity/priority rules and analyst dispositions, [RESPONSE.md](RESPONSE.md) for recommendation policy and the approval flow, [INVESTIGATION.md](INVESTIGATION.md) for evidence gathering and the summary packet, and [REPORTING.md](REPORTING.md) for incident-report generation and daily summaries.

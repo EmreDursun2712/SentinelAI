@@ -14,20 +14,26 @@ its point.
 ## Prerequisites (one-time, ~3 minutes)
 
 ```bash
-# 0a. Start the stack
-docker compose up -d --build
-docker compose exec backend alembic upgrade head
+# 0a. Set a bootstrap admin (so you can log in) — in .env before starting:
+#     BACKEND_BOOTSTRAP_ADMIN_USERNAME=admin
+#     BACKEND_BOOTSTRAP_ADMIN_PASSWORD=<a-strong-password>
 
-# 0b. Train + stage a model (any synthetic-size works)
+# 0b. Start the stack (migrations auto-apply on backend start)
+docker compose up -d --build
+
+# 0c. Train + stage a model (any synthetic-size works)
 python -m ml.train --synthetic 50000
 
-# 0c. Reload the backend so the lifespan picks up the model
+# 0d. Reload the backend so the lifespan picks up the model
 docker compose restart backend
 
-# 0d. Install the frontend deps + start dev server
-cd frontend && npm install && npm run dev
-# → http://localhost:5173
+# 0e. Open the dashboard and sign in with the bootstrap admin above
+# → http://localhost:5173   (the app redirects to /login)
 ```
+
+> Auth is on: the dashboard requires login, and every API call carries a JWT.
+> The default config is fully **simulated** — no packet capture, no real
+> firewall control. The Topbar shows backend / database / live (WS) / user state.
 
 Open three browser tabs:
 

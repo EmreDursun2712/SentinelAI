@@ -10,7 +10,10 @@ license = { text = "MIT" }
 dependencies = [
     "numpy>=2.1",
     "pandas>=2.2",
-    "scikit-learn>=1.5",
+    # Pinned to match backend/pyproject.toml exactly: the model trained here is
+    # served by the backend via joblib, so the sklearn version must agree (a
+    # minor-version mismatch breaks unpickling of the pipeline).
+    "scikit-learn==1.9.0",
     "joblib>=1.4",
     "pyarrow>=17.0",
 ]

@@ -2,7 +2,30 @@
 
 **AI-Driven Intrusion Detection and Response Dashboard**
 
-Term project for a third-year Computer and Network Security course. The system ingests network flow records, detects suspicious traffic with a CIC-IDS2017-trained classifier, and walks each alert through a five-stage agent workflow (Detect → Triage → Respond → Investigate → Report). All "response" actions are **simulated**: no real firewall, host, or third-party system is ever touched.
+Term project for a third-year Computer and Network Security course. The system ingests network flow records, detects suspicious traffic with a CIC-IDS2017-trained classifier, and walks each alert through a five-stage agent workflow (Detect → Triage → Respond → Investigate → Report). Response actions are **simulated by default**: no real firewall, host, or third-party system is touched unless an operator explicitly enables the gated, lab-only response mode.
+
+---
+
+## 0. Implementation status (production-grade hardening)
+
+Beyond the original five-agent workflow, the project has been hardened across six
+areas. All are implemented and tested; the unsafe ones are **off by default**.
+
+| Capability | State | Default | Reference |
+| --- | --- | --- | --- |
+| **JWT auth + RBAC** | Implemented | All `/api/v1` protected | [docs/AUTH.md](docs/AUTH.md) |
+| **Rate limiting** (Redis) | Implemented | On (in-proc fallback in dev) | [docs/RATE_LIMITING.md](docs/RATE_LIMITING.md) |
+| **WebSocket broadcasting** | Implemented | On (token-authenticated) | [docs/API.md](docs/API.md#event-stream-websocket) |
+| **Model drift monitoring** | Implemented | On (read), analyst-run | [docs/MODEL_DRIFT.md](docs/MODEL_DRIFT.md) |
+| **Live-flow sensor** (Zeek/Suricata logs) | Implemented | **OFF** — lab-only | [docs/LIVE_SENSOR.md](docs/LIVE_SENSOR.md) |
+| **Lab-only real response** | Implemented | **OFF** — simulated | [docs/LAB_RESPONSE.md](docs/LAB_RESPONSE.md) |
+
+Safety invariants enforced in code: response actions are `simulated` unless an
+explicit `LAB` action (DB CHECK `ck_response_actions_simulated_unless_lab`); the
+sensor refuses to start without `SENTINEL_SENSOR_ENABLED=true` + authorized
+CIDRs; real response requires `SENTINEL_RESPONSE_ENABLED=true` + lab mode +
+allowlisted CIDRs + analyst approval; nothing binds a NIC or captures packets.
+See [docs/ETHICS.md](docs/ETHICS.md).
 
 ---
 
@@ -90,18 +113,24 @@ NEW → TRIAGED → {AUTO_RESPONDED | AWAITING_ANALYST} → INVESTIGATED → REP
   - asset criticality (lookup table by destination IP / port).
 - **Output:** updates alert with `severity`, sets status `TRIAGED`, emits `alert.triaged`.
 
-### 2.3 Response Agent — `agents/response.py` **(simulated only)**
+### 2.3 Response Agent — `agents/response.py` **(simulated by default; lab-only real)**
 
 - **Input:** `alert.triaged` event.
-- **Job:** consult a policy table (`response_policies`) and propose an action:
-  - `BLOCK_IP` (simulated),
-  - `RATE_LIMIT` (simulated),
-  - `ISOLATE_HOST` (simulated),
-  - `NOTIFY_ANALYST` (always real — writes to UI),
-  - `NO_ACTION`.
-- For `LOW/MEDIUM` it sets status `AWAITING_ANALYST` and waits for a human to click "Approve" in the UI.
-- For `HIGH/CRITICAL` it auto-executes the simulated action and sets status `AUTO_RESPONDED`.
-- **Output:** creates a `ResponseAction` row with `executed=true|false` and `simulated=true` (always). Emits `alert.responded`.
+- **Job:** the `response_rules` engine proposes an ordered action list by severity:
+  `BLOCK_IP`, `RATE_LIMIT`, `ISOLATE_HOST`, `NOTIFY_ANALYST`, `CREATE_TICKET`,
+  `ESCALATE`, `SUPPRESS_ALERT`, `NO_ACTION`.
+- For `LOW/MEDIUM` analyst-approval actions it sets `AWAITING_ANALYST`; for
+  `HIGH/CRITICAL` it auto-executes the **simulated** safe actions (`AUTO_RESPONDED`).
+- **Execution modes.** Each action carries an `execution_mode`: `SIMULATED`
+  (default — no real effect) or `LAB`. A network action becomes `LAB` only when
+  lab response is explicitly enabled AND the target is in an allowlisted lab CIDR;
+  LAB network actions **always require analyst approval** (never auto-executed,
+  even at CRITICAL) and are executed through a `ResponseExecutor` (mock or
+  nftables), with rollback support. The DB CHECK
+  `ck_response_actions_simulated_unless_lab` makes a non-simulated row impossible
+  outside LAB mode. See [docs/LAB_RESPONSE.md](docs/LAB_RESPONSE.md).
+- **Output:** a `ResponseAction` row (`simulated=true` unless LAB);
+  emits `alert.responded` / `response.action_*`.
 
 > **Ethics guardrail.** `ResponseAction.simulated` is hard-coded `True` in code; there is no driver that talks to a real firewall. The "execution" is a logged event with a timestamp. This is enforced in `agents/response.py` and documented in `docs/ETHICS.md`.
 
@@ -339,6 +368,13 @@ Append-only log of every state transition and analyst action.
 
 All routes mounted at `/api/v1`. JSON in, JSON out. WebSocket at `/api/v1/stream`.
 
+> The high-level groups below are the original surface. The **authoritative,
+> current API** — including `/auth/*`, rate limits, `/detection/drift/*`,
+> `/ingest/flows`, `/ingest/sensor/status`, and `/response/{id}/rollback` — is
+> documented in [docs/API.md](docs/API.md). Health/auditing note: the audit trail
+> is the `agent_decisions` table (one row per agent step + analyst action); an
+> `ANALYST` agent value records human actions.
+
 ### Health & meta
 - `GET  /healthz` → `{status:"ok"}`
 - `GET  /api/v1/meta/model` → loaded model name, version, classes, metrics
@@ -410,83 +446,67 @@ Concurrency: agents run as awaitable handlers on the same event loop. Heavy work
 
 ---
 
-## 7. Phased Implementation Plan
+## 7. Implementation status
 
-Each phase ends with a working, demoable state — no half-finished slices.
+The full system is implemented: the five-agent workflow, the React dashboard, the
+scikit-learn pipeline, and Docker Compose — plus the six hardening capabilities in
+§0. Concretely:
 
-### Phase 0 — Scaffolding (½ day)
-- Repo skeleton, `docker-compose.yml`, `.env.example`, README.
-- Empty FastAPI app with `/healthz`, empty Vite app with a placeholder dashboard.
-- Postgres container up, Alembic initialized.
-- **Demo:** `docker compose up` → healthy backend, blank dashboard.
+- **Data + ML:** Alembic migrations `0001`–`0007`; offline training (`ml/train.py`)
+  emits a versioned artifact whose `metadata.json` carries a drift `baseline`.
+- **Agents:** detection → triage → response → investigation → reporting, wired
+  through the in-process event bus and persisted in Postgres.
+- **Auth/RBAC:** stateless JWT, `users` table, method-based RBAC on every
+  `/api/v1` router, bootstrap admin from env.
+- **Rate limiting:** Redis sliding-window limiter with per-policy buckets.
+- **Real-time:** authenticated WebSocket `/stream` broadcasts domain events
+  after commit; the frontend invalidates queries on receipt.
+- **Drift:** `model_drift_snapshots` + PSI-based drift API and dashboard panel.
+- **Live sensor:** standalone `sensor/` service (Zeek/Suricata log tailing),
+  off by default, lab-scoped.
+- **Lab response:** `ResponseExecutor` abstraction (simulated/mock/nftables),
+  off by default, allowlisted + approval-gated + reversible.
 
-### Phase 1 — Data model & migrations (½ day)
-- SQLAlchemy models for `alerts`, `response_actions`, `reports`, `assets`, `audit_log`.
-- First Alembic migration. Seed script with a handful of assets.
-- **Demo:** `psql` shows tables; `/api/v1/alerts` returns `[]`.
-
-### Phase 2 — ML pipeline offline (1 day)
-- `ml/preprocess.py`, `ml/train.py`, `ml/evaluate.py`.
-- Train a baseline RandomForest on a CIC-IDS2017 sample, persist `model.joblib`, `scaler.joblib`, `metadata.json`.
-- **Demo:** `python ml/train.py --sample` produces artifacts with > 0.95 macro-F1 on the held-out slice.
-
-### Phase 3 — Detection + Triage agents + ingestion (1 day)
-- `ingestion/parser.py`, `ingestion/replayer.py`, `POST /ingest/flow`.
-- `agents/detection.py` loads model at startup, classifies a flow, writes Alert.
-- `agents/triage.py` assigns severity.
-- **Demo:** `POST /ingest/replay` walks through 200 flows; `GET /alerts` shows them with severity.
-
-### Phase 4 — Response agent + WebSocket (1 day)
-- `agents/response.py` with policy table and simulated execution.
-- WebSocket broadcaster, frontend `useWS()` hook.
-- **Demo:** Dashboard updates live as flows are replayed; Response Center lists pending approvals.
-
-### Phase 5 — Frontend pages (1.5 days)
-- Dashboard (KPIs + severity-over-time chart + recent alerts).
-- Alerts list (filterable table) + Alert Detail (with Agent Timeline).
-- Response Center (approve / reject).
-- Reports list.
-- **Demo:** Full UI navigable; approving an action moves the alert forward visibly.
-
-### Phase 6 — Investigation + Reporting agents (1 day)
-- `agents/investigation.py` builds the packet, surfaces in Alert Detail.
-- `agents/reporting.py` produces per-alert markdown + PDF via WeasyPrint.
-- Daily summary endpoint + cron tick (simple `asyncio.create_task` loop).
-- **Demo:** Click an alert → see investigation block → "Generate Report" → PDF downloads.
-
-### Phase 7 — Polish, tests, docs (1 day)
-- pytest coverage on agents and API.
-- Frontend smoke tests with Vitest.
-- `docs/ETHICS.md`, `docs/DEMO_SCRIPT.md`, screenshots in `README.md`.
-- **Demo:** End-to-end replay of an attack slice, narrated.
-
-**Total: ~7 working days** — fits a term project sprint.
+Quality gates: `make test` (backend pytest + frontend vitest), `make typecheck`,
+`make lint`, and the `infra/scripts/smoke_demo.sh` end-to-end check.
 
 ---
 
 ## 8. Ethics & Safety Guardrails
 
-- **No live response.** Every `ResponseAction` has `simulated=true` enforced at the model layer; there is no adapter that reaches outside the container.
-- **No real network capture in default mode.** The replayer reads from a CSV file shipped with the project; live capture is out of scope.
-- **No external data exfiltration.** The reporting agent writes only to the local `data/reports/` volume.
-- **Dataset license respected.** CIC-IDS2017 usage is documented in `docs/DATASET.md`; raw dataset files are gitignored.
-- **Auditable.** Every transition and analyst action is appended to `audit_log`.
+- **Simulated by default.** A `ResponseAction` is `simulated=true` unless it is an
+  explicit `LAB` action; the DB CHECK `ck_response_actions_simulated_unless_lab`
+  makes a real (non-simulated) row impossible outside LAB mode.
+- **No production response.** LAB mode is off by default and, when enabled, only
+  acts on allowlisted lab CIDRs with analyst approval and rollback — never public
+  or external targets. ([docs/LAB_RESPONSE.md](docs/LAB_RESPONSE.md))
+- **No packet capture, metadata only.** No NIC binding / `tcpdump` / `pcap`. The
+  optional sensor reads flow *logs* (Zeek/Suricata), off by default, scoped to
+  authorized lab CIDRs, payloads never read or stored. ([docs/LIVE_SENSOR.md](docs/LIVE_SENSOR.md))
+- **AuthN/Z everywhere.** Every `/api/v1` endpoint requires a JWT (except login);
+  RBAC restricts mutations to ANALYST+/ADMIN.
+- **No external exfiltration.** Reports are written only to the local
+  `data/reports/` volume.
+- **Auditable.** Every agent step + analyst action is appended to `agent_decisions`.
 
 ---
 
 ## Deliverables Summary
 
-### 1. What was implemented (this stage)
+### 1. What is implemented
 
-This stage delivered the **architecture and planning artifact** for SentinelAI. No backend, frontend, or ML code has been written yet — that begins in Phase 0 of the implementation plan above. What is now in place:
+SentinelAI is a complete, runnable system — backend, frontend, ML pipeline, and
+infra — with the six hardening capabilities of §0. In place:
 
-- A concrete modular-monolith architecture with explicit module boundaries.
-- Responsibilities defined for all five agent modules and the in-process event flow that connects them.
-- A full folder layout for `backend/`, `frontend/`, `ml/`, `infra/`, and `docs/`.
-- Database entities with columns, types, and indexes.
-- HTTP + WebSocket API surface grouped by domain.
-- End-to-end data flow from ingested flow record to generated report.
-- A seven-phase implementation plan sized to a term project.
+- A modular-monolith architecture with explicit module boundaries.
+- All five agent modules + the in-process event flow that connects them.
+- The `backend/`, `frontend/`, `ml/`, `sensor/`, `infra/`, `docs/` layout.
+- Database entities (migrations `0001`–`0007`) with columns, types, indexes, and
+  the mode-aware response guardrail.
+- HTTP + authenticated WebSocket API (auth, rate limits, drift, sensor, response).
+- End-to-end data flow from ingested flow record to generated report, live over WS.
+- JWT auth + RBAC, Redis rate limiting, model-drift monitoring, an optional
+  lab-only live sensor, and an optional lab-only real-response framework.
 - Ethics guardrails making the simulated-response stance explicit.
 
 ### 2. Files created / updated

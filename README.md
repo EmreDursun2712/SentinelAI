@@ -208,12 +208,22 @@ start in a production-like `SENTINEL_ENV` while `JWT_SECRET` is still the defaul
 
 ## Project status
 
-Phases 0–13 complete (data model, ingestion, ML pipeline, five-agent
-workflow, frontend dashboard + alert/response/report pages, end-to-end
-integration, test coverage). Phase 14 (this pass) hardens Docker Compose
-for classroom demo use: backend entrypoint auto-applies migrations, both
-service containers have health probes, and `make bootstrap` brings a fresh
-clone to a working demo in one command.
+The full system is implemented — the five-agent workflow, the dashboard, the ML
+pipeline, and Docker Compose — plus six production-grade hardening capabilities.
+The unsafe ones are **off by default**:
+
+| Capability | Default | Docs |
+| --- | --- | --- |
+| JWT authentication + RBAC | on (all `/api/v1`) | [docs/AUTH.md](docs/AUTH.md) |
+| Redis rate limiting | on | [docs/RATE_LIMITING.md](docs/RATE_LIMITING.md) |
+| Real-time WebSocket broadcasting | on | [docs/API.md](docs/API.md#event-stream-websocket) |
+| Model drift monitoring | on | [docs/MODEL_DRIFT.md](docs/MODEL_DRIFT.md) |
+| Live-flow sensor (Zeek/Suricata logs) | **off — lab only** | [docs/LIVE_SENSOR.md](docs/LIVE_SENSOR.md) |
+| Lab-only real response | **off — simulated** | [docs/LAB_RESPONSE.md](docs/LAB_RESPONSE.md) |
+
+`make bootstrap` brings a fresh clone to a working demo in one command; the
+default configuration is fully simulated and cannot capture packets or touch a
+real firewall.
 
 ---
 
