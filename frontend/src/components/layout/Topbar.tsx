@@ -14,6 +14,8 @@ const TITLES: Record<string, string> = {
   "/response": "Response Center",
   "/reports": "Reports",
   "/ingestion": "Ingestion",
+  "/system": "System",
+  "/admin/users": "Users",
 };
 
 function activeTitle(pathname: string): string {

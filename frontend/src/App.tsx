@@ -10,6 +10,7 @@ import IngestionPage from "@/pages/IngestionPage";
 import LoginPage from "@/pages/LoginPage";
 import ReportsPage from "@/pages/ReportsPage";
 import ResponseCenterPage from "@/pages/ResponseCenterPage";
+import SystemPage from "@/pages/SystemPage";
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
           <Route path="response" element={<ResponseCenterPage />} />
           <Route path="reports" element={<ReportsPage />} />
           <Route path="ingestion" element={<IngestionPage />} />
+          <Route path="system" element={<SystemPage />} />
           <Route path="admin/users" element={<AdminUsersPage />} />
         </Route>
       </Route>

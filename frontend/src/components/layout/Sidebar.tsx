@@ -7,6 +7,7 @@ import {
   IngestionIcon,
   ReportIcon,
   ResponseIcon,
+  ServerIcon,
   ShieldIcon,
 } from "@/components/icons";
 import { useAuth } from "@/lib/auth/AuthContext";
@@ -25,6 +26,7 @@ const NAV: readonly NavItem[] = [
   { to: "/response", label: "Response Center", icon: ResponseIcon },
   { to: "/reports", label: "Reports", icon: ReportIcon },
   { to: "/ingestion", label: "Ingestion", icon: IngestionIcon },
+  { to: "/system", label: "System", icon: ServerIcon },
 ];
 
 // Shown only to admins.
