@@ -16,11 +16,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Query, Response, UploadFile, status
 from pydantic import ValidationError
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 
 from app.api.deps import SessionDep, rate_limit
+from app.api.pagination import set_total_count
 from app.core.config import get_settings
 from app.core.errors import AppError, BadRequestError, NotFoundError
 from app.core.logging import get_logger
@@ -200,10 +201,14 @@ async def get_sensor_status(session: SessionDep) -> SensorStatusOut:
 @router.get("/jobs")
 async def list_jobs(
     session: SessionDep,
+    response: Response,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0, le=100_000)] = 0,
 ) -> list[IngestionJobOut]:
+    total = (await session.execute(select(func.count(IngestionJob.id)))).scalar_one() or 0
+    set_total_count(response, int(total))
     result = await session.execute(
-        select(IngestionJob).order_by(desc(IngestionJob.created_at)).limit(limit)
+        select(IngestionJob).order_by(desc(IngestionJob.created_at)).offset(offset).limit(limit)
     )
     return [IngestionJobOut.model_validate(j) for j in result.scalars().all()]
 

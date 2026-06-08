@@ -3,9 +3,9 @@ name: frontend
 on:
   push:
     branches: [main]
-    paths: ["frontend/**", ".github/workflows/frontend.yml"]
+    paths: ["frontend/**", "backend/openapi.json", ".github/workflows/frontend.yml"]
   pull_request:
-    paths: ["frontend/**", ".github/workflows/frontend.yml"]
+    paths: ["frontend/**", "backend/openapi.json", ".github/workflows/frontend.yml"]
   workflow_dispatch:
 
 jobs:
@@ -23,6 +23,11 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install dependencies
         run: npm ci
+      - name: API types are up to date
+        run: |
+          npm run generate:api-types
+          git diff --exit-code src/lib/api/schema.d.ts \
+            || (echo "::error::frontend api types are stale — run 'make api-types' and commit." && exit 1)
       - name: Typecheck
         run: npm run typecheck
       - name: Test

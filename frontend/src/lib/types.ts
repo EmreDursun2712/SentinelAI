@@ -1,5 +1,13 @@
-// Mirrors backend Pydantic schemas. Kept in sync by hand for the course project;
-// can be replaced by an OpenAPI codegen step later.
+// Hand-written DTO aliases used across the app. The **source of truth** is the
+// backend OpenAPI schema, generated into ./api/schema.d.ts via
+// `npm run generate:api-types` (CI verifies it's up to date). Prefer the
+// generated `Schemas[...]` types for new code; these aliases are kept for
+// ergonomics and are migrated to the generated types over time.
+
+import type { components } from "@/lib/api/schema";
+
+/** All response/request schemas generated from the backend OpenAPI spec. */
+export type Schemas = components["schemas"];
 
 // ----- Auth ---------------------------------------------------------------
 

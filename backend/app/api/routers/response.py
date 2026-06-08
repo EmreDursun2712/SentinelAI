@@ -14,9 +14,10 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 
 from app.api.deps import SessionDep, rate_limit
+from app.api.pagination import set_total_count
 from app.core.errors import NotFoundError
 from app.models import Alert, ResponseAction
 from app.models.enums import ResponseActionType, ResponseStatus
@@ -29,6 +30,9 @@ from app.schemas.response import (
 )
 from app.services.response_service import (
     approve_action as svc_approve,
+)
+from app.services.response_service import (
+    count_actions as svc_count,
 )
 from app.services.response_service import (
     list_actions as svc_list,
@@ -53,9 +57,11 @@ def _to_out(action: ResponseAction) -> ResponseActionOut:
 @router.get("/pending")
 async def list_pending_actions(
     session: SessionDep,
+    response: Response,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0, le=100_000)] = 0,
 ) -> list[ResponseActionOut]:
+    set_total_count(response, await svc_count(session, status=ResponseStatus.PENDING))
     actions = await svc_list(session, status=ResponseStatus.PENDING, limit=limit, offset=offset)
     return [_to_out(a) for a in actions]
 
@@ -63,12 +69,17 @@ async def list_pending_actions(
 @router.get("")
 async def list_response_actions(
     session: SessionDep,
+    response: Response,
     alert_id: Annotated[int | None, Query(ge=1)] = None,
     status_filter: Annotated[ResponseStatus | None, Query(alias="status")] = None,
     action_type: Annotated[ResponseActionType | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0, le=100_000)] = 0,
 ) -> list[ResponseActionOut]:
+    set_total_count(
+        response,
+        await svc_count(session, alert_id=alert_id, status=status_filter, action_type=action_type),
+    )
     actions = await svc_list(
         session,
         alert_id=alert_id,

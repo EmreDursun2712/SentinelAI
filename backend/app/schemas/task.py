@@ -45,6 +45,7 @@ class ReportAlertTaskRequest(BaseModel):
 
 class RetentionCleanupTaskRequest(BaseModel):
     days: int = Field(default=90, ge=1, le=3650)
+    dry_run: bool = False
 
 
 class RetrainTaskRequest(BaseModel):

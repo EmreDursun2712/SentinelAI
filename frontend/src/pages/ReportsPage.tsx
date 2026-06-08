@@ -58,7 +58,7 @@ export default function ReportsPage() {
   });
 
   const pendingAlerts = useMemo(
-    () => (pendingAlertsQ.data ?? []).filter((a) => !ALREADY_REPORTED.has(a.status)),
+    () => (pendingAlertsQ.data?.items ?? []).filter((a) => !ALREADY_REPORTED.has(a.status)),
     [pendingAlertsQ.data],
   );
 

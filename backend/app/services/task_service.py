@@ -79,6 +79,17 @@ async def get_task(session: AsyncSession, task_id: str) -> Task | None:
     return await session.get(Task, task_id)
 
 
+def _tasks_filtered(created_by: str | None, status: TaskStatus | None, kind: TaskKind | None):
+    stmt = select(Task)
+    if created_by is not None:
+        stmt = stmt.where(Task.created_by == created_by)
+    if status is not None:
+        stmt = stmt.where(Task.status == status)
+    if kind is not None:
+        stmt = stmt.where(Task.kind == kind)
+    return stmt
+
+
 async def list_tasks(
     session: AsyncSession,
     *,
@@ -89,15 +100,25 @@ async def list_tasks(
     offset: int = 0,
 ) -> list[Task]:
     """List tasks newest-first. ``created_by`` filters to one owner (RBAC)."""
-    stmt = select(Task).order_by(Task.created_at.desc())
-    if created_by is not None:
-        stmt = stmt.where(Task.created_by == created_by)
-    if status is not None:
-        stmt = stmt.where(Task.status == status)
-    if kind is not None:
-        stmt = stmt.where(Task.kind == kind)
-    stmt = stmt.offset(offset).limit(limit)
+    stmt = (
+        _tasks_filtered(created_by, status, kind)
+        .order_by(Task.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
     return list((await session.execute(stmt)).scalars().all())
+
+
+async def count_tasks(
+    session: AsyncSession,
+    *,
+    created_by: str | None = None,
+    status: TaskStatus | None = None,
+    kind: TaskKind | None = None,
+) -> int:
+    from app.api.pagination import count_for
+
+    return await count_for(session, _tasks_filtered(created_by, status, kind))
 
 
 # ---------------------------------------------------------------------------

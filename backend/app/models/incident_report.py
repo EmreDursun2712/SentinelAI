@@ -54,5 +54,7 @@ class IncidentReport(TimestampMixin, Base):
     )
     md_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     pdf_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Soft-delete marker (data retention). See app.services.retention_service.
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     alert: Mapped[Alert | None] = relationship(back_populates="reports")

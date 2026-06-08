@@ -74,8 +74,7 @@ export default function AlertsPage() {
     refetchInterval: 60_000,
   });
 
-  // Fetch PAGE_SIZE+1 so we can tell whether there's a "next page" without
-  // an extra count query.
+  // Real pagination off the X-Total-Count header (no PAGE_SIZE+1 trick).
   const offset = (page - 1) * PAGE_SIZE;
   const listQ = useQuery({
     queryKey: [
@@ -90,15 +89,17 @@ export default function AlertsPage() {
         disposition: disposition || undefined,
         prediction: prediction || undefined,
         sort,
-        limit: PAGE_SIZE + 1,
+        limit: PAGE_SIZE,
         offset,
       }),
     placeholderData: (prev) => prev,
     refetchInterval: 30_000,
   });
 
-  const rows = useMemo(() => (listQ.data ?? []).slice(0, PAGE_SIZE), [listQ.data]);
-  const hasNext = (listQ.data ?? []).length > PAGE_SIZE;
+  const rows = useMemo(() => listQ.data?.items ?? [], [listQ.data]);
+  const total = listQ.data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const hasNext = page < totalPages;
   const hasPrev = page > 1;
 
   const activeFilterCount = [q, severity, status, disposition, prediction].filter(
@@ -118,8 +119,8 @@ export default function AlertsPage() {
         title="Alerts"
         description={
           activeFilterCount > 0
-            ? `${activeFilterCount} active filter(s) · ${rows.length} row(s) on page ${page}.`
-            : "Search and filter alerts across severity, status, disposition, and attack family."
+            ? `${activeFilterCount} active filter(s) · ${total} match(es) · page ${page} of ${totalPages}.`
+            : `${total} alert(s) · page ${page} of ${totalPages}.`
         }
       />
 
@@ -309,10 +310,10 @@ export default function AlertsPage() {
             {/* ---- Pagination ---- */}
             <div className="flex items-center justify-between border-t border-slate-800 px-5 py-3 text-xs text-slate-400">
               <span>
-                Page <span className="text-slate-300">{page}</span>
+                Page <span className="text-slate-300">{page}</span> of{" "}
+                <span className="text-slate-300">{totalPages}</span>
                 <span className="mx-1 text-slate-600">·</span>
-                Showing{" "}
-                <span className="text-slate-300">{rows.length}</span> row(s)
+                <span className="text-slate-300">{total}</span> total
                 {listQ.isFetching && (
                   <span className="ml-2 inline-flex items-center gap-1 text-slate-500">
                     <Spinner className="h-3 w-3" />

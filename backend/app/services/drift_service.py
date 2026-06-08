@@ -25,7 +25,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import numpy as np
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -322,6 +322,10 @@ async def get_latest_snapshot(session: AsyncSession) -> ModelDriftSnapshot | Non
             select(ModelDriftSnapshot).order_by(desc(ModelDriftSnapshot.created_at)).limit(1)
         )
     ).scalar_one_or_none()
+
+
+async def count_snapshots(session: AsyncSession) -> int:
+    return int((await session.execute(select(func.count(ModelDriftSnapshot.id)))).scalar_one() or 0)
 
 
 async def list_snapshots(session: AsyncSession, *, limit: int = 20) -> list[ModelDriftSnapshot]:

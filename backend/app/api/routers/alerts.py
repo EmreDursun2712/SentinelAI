@@ -10,11 +10,12 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy import String, cast, desc, func, or_, select
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import SessionDep, rate_limit
+from app.api.pagination import count_for, set_total_count
 from app.core.errors import NotFoundError
 from app.models import Alert
 from app.models.enums import AlertDisposition, AlertStatus, Severity
@@ -65,6 +66,7 @@ SortKey = Literal["created_at", "priority", "severity"]
 @router.get("")
 async def list_alerts(
     session: SessionDep,
+    response: Response,
     status_filter: Annotated[AlertStatus | None, Query(alias="status")] = None,
     severity: Annotated[Severity | None, Query()] = None,
     disposition: Annotated[AlertDisposition | None, Query()] = None,
@@ -77,7 +79,8 @@ async def list_alerts(
     limit: Annotated[int, Query(ge=1, le=500)] = 50,
     offset: Annotated[int, Query(ge=0, le=100_000)] = 0,
 ) -> list[AlertOut]:
-    stmt = select(Alert)
+    # Archived (soft-deleted) alerts are hidden from the default list.
+    stmt = select(Alert).where(Alert.archived_at.is_(None))
     if status_filter is not None:
         stmt = stmt.where(Alert.status == status_filter)
     if severity is not None:
@@ -103,6 +106,8 @@ async def list_alerts(
                 Alert.prediction.ilike(pattern),
             )
         )
+
+    set_total_count(response, await count_for(session, stmt))
 
     if sort == "priority":
         # NULLS LAST so un-triaged rows sink to the bottom of the dashboard.

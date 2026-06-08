@@ -480,6 +480,21 @@ async def _maybe_advance_status(session: AsyncSession, alert: Alert) -> None:
         alert.status = AlertStatus.AUTO_RESPONDED
 
 
+def _actions_filtered(
+    alert_id: int | None,
+    status: ResponseStatus | None,
+    action_type: ResponseActionType | None,
+):
+    stmt = select(ResponseAction)
+    if alert_id is not None:
+        stmt = stmt.where(ResponseAction.alert_id == alert_id)
+    if status is not None:
+        stmt = stmt.where(ResponseAction.status == status)
+    if action_type is not None:
+        stmt = stmt.where(ResponseAction.action_type == action_type)
+    return stmt
+
+
 async def list_actions(
     session: AsyncSession,
     *,
@@ -489,13 +504,23 @@ async def list_actions(
     limit: int = 100,
     offset: int = 0,
 ) -> list[ResponseAction]:
-    stmt = select(ResponseAction).order_by(ResponseAction.created_at.desc())
-    if alert_id is not None:
-        stmt = stmt.where(ResponseAction.alert_id == alert_id)
-    if status is not None:
-        stmt = stmt.where(ResponseAction.status == status)
-    if action_type is not None:
-        stmt = stmt.where(ResponseAction.action_type == action_type)
-    stmt = stmt.offset(offset).limit(limit)
+    stmt = (
+        _actions_filtered(alert_id, status, action_type)
+        .order_by(ResponseAction.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
     result = await session.execute(stmt)
     return list(result.scalars().all())
+
+
+async def count_actions(
+    session: AsyncSession,
+    *,
+    alert_id: int | None = None,
+    status: ResponseStatus | None = None,
+    action_type: ResponseActionType | None = None,
+) -> int:
+    from app.api.pagination import count_for
+
+    return await count_for(session, _actions_filtered(alert_id, status, action_type))

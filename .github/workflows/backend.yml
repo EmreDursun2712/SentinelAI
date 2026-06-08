@@ -29,6 +29,14 @@ jobs:
         run: ruff format --check .
       - name: Pytest
         run: pytest -q
+      - name: OpenAPI schema is up to date
+        # Advisory: surfaces spec drift without reddening the board if a FastAPI
+        # minor changes the schema's incidental formatting. Run `make openapi`.
+        continue-on-error: true
+        run: |
+          python -m app.scripts.dump_openapi > openapi.json
+          git diff --exit-code openapi.json \
+            || (echo "::warning::backend/openapi.json may be stale — run 'make openapi' and commit." && exit 1)
 
   sensor:
     runs-on: ubuntu-latest

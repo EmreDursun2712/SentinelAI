@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { clearToken, getToken, setToken, UNAUTHORIZED_EVENT } from "@/lib/auth/token";
-import { ApiError, request } from "./client";
+import { ApiError, request, requestList } from "./client";
 
-function jsonResponse(body: unknown, status = 200): Response {
+function jsonResponse(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(body === null ? "" : JSON.stringify(body), {
     status,
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...headers },
   });
 }
 
@@ -79,5 +79,24 @@ describe("api client", () => {
     await request("/alerts");
 
     expect(headersOf(fetchMock.mock.calls[0])["X-CSRF-Token"]).toBeUndefined();
+  });
+
+  test("requestList reads the total from X-Total-Count", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse([{ id: 1 }, { id: 2 }], 200, { "x-total-count": "57" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { items, total } = await requestList<{ id: number }>("/alerts");
+    expect(items).toHaveLength(2);
+    expect(total).toBe(57);
+  });
+
+  test("requestList falls back to item length when the header is absent", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse([{ id: 1 }], 200));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { total } = await requestList<{ id: number }>("/alerts");
+    expect(total).toBe(1);
   });
 });

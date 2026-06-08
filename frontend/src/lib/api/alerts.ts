@@ -10,7 +10,7 @@ import type {
   UpdateDispositionBody,
 } from "@/lib/types";
 import type { AlertStatus } from "@/lib/types";
-import { qs, request } from "./client";
+import { type ListResult, qs, request, requestList } from "./client";
 
 export interface ListAlertsParams {
   status?: AlertStatus;
@@ -26,8 +26,9 @@ export interface ListAlertsParams {
   offset?: number;
 }
 
-export function listAlerts(params: ListAlertsParams = {}): Promise<Alert[]> {
-  return request<Alert[]>(`/alerts${qs(params)}`);
+/** Paginated alert list: returns items + the total count (from X-Total-Count). */
+export function listAlerts(params: ListAlertsParams = {}): Promise<ListResult<Alert>> {
+  return requestList<Alert>(`/alerts${qs(params)}`);
 }
 
 export function getAlertStats(): Promise<AlertStats> {

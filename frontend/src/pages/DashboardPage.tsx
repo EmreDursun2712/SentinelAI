@@ -181,7 +181,7 @@ export default function DashboardPage() {
             </div>
           ) : recentQ.isError ? (
             <ErrorState description="Failed to load alerts." />
-          ) : recentQ.data?.length === 0 ? (
+          ) : (recentQ.data?.items.length ?? 0) === 0 ? (
             <EmptyState
               title="No alerts yet"
               description="Ingest a CSV and run detection to populate this view."
@@ -208,7 +208,7 @@ export default function DashboardPage() {
                 </Tr>
               </Thead>
               <Tbody>
-                {recentQ.data!.map((a) => (
+                {recentQ.data!.items.map((a) => (
                   <Tr key={a.id}>
                     <Td>
                       <Link

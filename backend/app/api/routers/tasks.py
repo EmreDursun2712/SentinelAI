@@ -18,9 +18,10 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 
 from app.api.deps import ActiveUser, SessionDep, rate_limit, require_admin
+from app.api.pagination import set_total_count
 from app.core.config import get_settings
 from app.core.errors import BadRequestError, NotFoundError
 from app.core.logging import get_logger
@@ -53,6 +54,7 @@ async def _require_retrain_enabled() -> None:
 @router.get("")
 async def list_tasks(
     session: SessionDep,
+    response: Response,
     user: ActiveUser,
     status_filter: Annotated[TaskStatus | None, Query(alias="status")] = None,
     kind: TaskKind | None = None,
@@ -61,6 +63,10 @@ async def list_tasks(
 ) -> TaskListOut:
     # Non-admins only see their own tasks.
     owner = None if user.role == Role.ADMIN else user.username
+    set_total_count(
+        response,
+        await task_service.count_tasks(session, created_by=owner, status=status_filter, kind=kind),
+    )
     tasks = await task_service.list_tasks(
         session, created_by=owner, status=status_filter, kind=kind, limit=limit, offset=offset
     )
@@ -139,7 +145,7 @@ async def enqueue_retention_cleanup(
     task = await task_service.create_task(
         session,
         kind=TaskKind.RETENTION_CLEANUP,
-        params={"days": req.days},
+        params={"days": req.days, "dry_run": req.dry_run},
         created_by=user.username,
     )
     return TaskOut.model_validate(task)

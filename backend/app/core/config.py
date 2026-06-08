@@ -109,8 +109,16 @@ class Settings(BaseSettings):
     # When no Redis is configured, enqueue is a no-op (tasks stay PENDING) — dev
     # without a worker still serves the synchronous endpoints. See TASK_QUEUE.md.
     task_queue_name: str = "sentinelai:queue"
-    retention_days: int = 90  # default age cutoff for the retention-cleanup task
+    retention_days: int = 90  # housekeeping cutoff for terminal tasks + drift snapshots
     ml_retrain_enabled: bool = False  # gate the (heavy) ML retrain task endpoint
+
+    # Data retention. Each is an age cutoff in days; **0 disables** that policy
+    # (safe default — nothing is deleted/archived unless explicitly configured).
+    # Events are hard-deleted (alerts.event_id is SET NULL); alerts + reports are
+    # soft-deleted (archived_at) to preserve the audit trail. See DATA_RETENTION.md.
+    retention_events_days: int = 0
+    retention_alerts_days: int = 0
+    retention_reports_days: int = 0
 
     # Reporting
     reports_dir: str = "data/reports"

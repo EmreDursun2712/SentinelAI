@@ -65,6 +65,14 @@ restore-db: ## Restore from a dump: make restore-db BACKUP=backups/<file>.sql.gz
 	@[ -n "$(BACKUP)" ] || { echo "usage: make restore-db BACKUP=backups/<file>.sql.gz"; exit 2; }
 	bash $(SCRIPTS)/restore_db.sh "$(BACKUP)"
 
+.PHONY: retention-dry-run
+retention-dry-run: ## Report what the data-retention policy WOULD delete/archive (no writes).
+	docker compose exec backend python -m app.scripts.retention
+
+.PHONY: retention-apply
+retention-apply: ## Apply the data-retention policy (DESTRUCTIVE; events hard-deleted, alerts/reports archived).
+	docker compose exec backend python -m app.scripts.retention --apply
+
 # ---------- one-command demo prep ----------
 
 .PHONY: bootstrap
@@ -115,6 +123,14 @@ test-frontend: ## Run the frontend vitest suite.
 .PHONY: typecheck
 typecheck: ## Run the frontend TypeScript compiler in --noEmit mode.
 	cd frontend && npx tsc --noEmit
+
+.PHONY: openapi
+openapi: ## Regenerate backend/openapi.json from the FastAPI app.
+	cd backend && python -m app.scripts.dump_openapi > openapi.json
+
+.PHONY: api-types
+api-types: openapi ## Regenerate backend/openapi.json + frontend TS types from it.
+	cd frontend && npm run generate:api-types
 
 .PHONY: lint
 lint: ## Ruff lint + format check on the backend.

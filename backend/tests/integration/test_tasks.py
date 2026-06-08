@@ -80,4 +80,6 @@ async def test_worker_retention_cleanup_succeeds(db_session: AsyncSession) -> No
     await jobs.run_retention_cleanup(db_session, task.id)
     await db_session.refresh(task)
     assert task.status == TaskStatus.SUCCEEDED
-    assert "tasks_deleted" in (task.result or {})
+    result = task.result or {}
+    assert "retention" in result and "tasks" in result
+    assert result["tasks"]["matched"] >= 0

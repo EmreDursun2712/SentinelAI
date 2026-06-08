@@ -251,11 +251,16 @@ async def test_drift_history_serializes_snapshots(
     async def fake_list(session, *, limit):
         return [snap]
 
+    async def fake_count(session):
+        return 1
+
     monkeypatch.setattr(drift_service, "list_snapshots", fake_list)
+    monkeypatch.setattr(drift_service, "count_snapshots", fake_count)
     resp = await client.get(
         "/api/v1/detection/drift/history?limit=5", headers=_headers(Role.VIEWER)
     )
     assert resp.status_code == 200
+    assert resp.headers["x-total-count"] == "1"
     items = resp.json()["items"]
     assert len(items) == 1
     assert items[0]["status"] == "DRIFT"

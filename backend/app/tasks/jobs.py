@@ -16,14 +16,14 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import delete
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.db import session_scope
 from app.core.logging import get_logger
 from app.models import Alert, ModelDriftSnapshot, Task
-from app.services import drift_service, task_service
+from app.services import drift_service, retention_service, task_service
 from app.services.detection_service import detect_events, fetch_undetected_events
 from app.services.model_registry import get_model_registry
 from app.services.reporting_service import generate_alert_report, generate_daily_summary
@@ -120,41 +120,70 @@ async def run_drift(session: AsyncSession, task_id: str) -> None:
 
 
 async def run_retention_cleanup(session: AsyncSession, task_id: str) -> None:
-    """Safe housekeeping: delete old terminal tasks + drift snapshots.
-
-    Event/alert history is intentionally preserved (it backs investigations).
+    """Housekeeping (old terminal tasks + drift snapshots) plus the data
+    retention policy (events/alerts/reports). Honors ``params.dry_run``.
     """
     task = await task_service.mark_running(session, task_id)
     if task is None:
         return
     try:
+        dry_run = bool(task.params.get("dry_run", False))
         days = int(task.params.get("days", get_settings().retention_days))
         cutoff = datetime.now(UTC) - timedelta(days=max(1, days))
 
         from app.models.enums import TASK_TERMINAL_STATES
 
-        tasks_deleted = (
-            await session.execute(
-                delete(Task).where(
-                    Task.created_at < cutoff,
-                    Task.status.in_(list(TASK_TERMINAL_STATES)),
-                    Task.id != task_id,
+        task_conds = (
+            Task.created_at < cutoff,
+            Task.status.in_(list(TASK_TERMINAL_STATES)),
+            Task.id != task_id,
+        )
+        tasks_matched = int(
+            (
+                await session.execute(select(func.count()).select_from(Task).where(*task_conds))
+            ).scalar_one()
+            or 0
+        )
+        snapshots_matched = int(
+            (
+                await session.execute(
+                    select(func.count(ModelDriftSnapshot.id)).where(
+                        ModelDriftSnapshot.created_at < cutoff
+                    )
                 )
+            ).scalar_one()
+            or 0
+        )
+        tasks_affected = snapshots_affected = 0
+        if not dry_run:
+            tasks_affected = int(
+                (await session.execute(delete(Task).where(*task_conds))).rowcount or 0
             )
-        ).rowcount or 0
-        snapshots_deleted = (
-            await session.execute(
-                delete(ModelDriftSnapshot).where(ModelDriftSnapshot.created_at < cutoff)
+            snapshots_affected = int(
+                (
+                    await session.execute(
+                        delete(ModelDriftSnapshot).where(ModelDriftSnapshot.created_at < cutoff)
+                    )
+                ).rowcount
+                or 0
             )
-        ).rowcount or 0
-        await session.commit()
+            await session.commit()
+
+        # Data retention policy (events/alerts/reports) — safe + dry-run aware.
+        retention = await retention_service.apply_retention(session, dry_run=dry_run)
+
         await task_service.mark_succeeded(
             session,
             task_id,
             {
+                "dry_run": dry_run,
                 "cutoff": cutoff.isoformat(),
-                "tasks_deleted": int(tasks_deleted),
-                "drift_snapshots_deleted": int(snapshots_deleted),
+                "tasks": {"matched": tasks_matched, "affected": tasks_affected},
+                "drift_snapshots": {
+                    "matched": snapshots_matched,
+                    "affected": snapshots_affected,
+                },
+                "retention": retention,
             },
         )
     except Exception as exc:

@@ -97,8 +97,12 @@ function attemptRefresh(): Promise<boolean> {
   return refreshInFlight;
 }
 
-/** Call a path relative to the versioned API base. */
-export async function request<T>(path: string, init: RequestInitWithBody = {}): Promise<T> {
+// Shared send: fetch, refresh-on-401-and-replay, parse, and raise ApiError.
+// Returns the (ok) Response + parsed body so callers can also read headers.
+async function _send(
+  path: string,
+  init: RequestInitWithBody,
+): Promise<{ response: Response; parsed: unknown }> {
   let response = await _fetch(`${API_BASE}${path}`, init);
 
   // On 401, try refreshing the session once (using the httpOnly refresh cookie),
@@ -122,7 +126,32 @@ export async function request<T>(path: string, init: RequestInitWithBody = {}): 
     }
     throw new ApiError(response.status, parsed, requestId);
   }
+  return { response, parsed };
+}
+
+/** Call a path relative to the versioned API base. */
+export async function request<T>(path: string, init: RequestInitWithBody = {}): Promise<T> {
+  const { parsed } = await _send(path, init);
   return parsed as T;
+}
+
+export interface ListResult<T> {
+  items: T[];
+  total: number;
+}
+
+/** Like `request`, but for list endpoints: returns the items plus the
+ *  unpaginated `total` from the `X-Total-Count` header (falls back to the
+ *  array length when the header is absent). */
+export async function requestList<T>(
+  path: string,
+  init: RequestInitWithBody = {},
+): Promise<ListResult<T>> {
+  const { response, parsed } = await _send(path, init);
+  const items = (Array.isArray(parsed) ? parsed : []) as T[];
+  const header = response.headers.get("x-total-count");
+  const total = header !== null ? Number(header) : items.length;
+  return { items, total: Number.isFinite(total) ? total : items.length };
 }
 
 /** Call a path relative to the API root (used for /health and /readyz only). */

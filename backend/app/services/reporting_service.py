@@ -330,6 +330,16 @@ async def generate_daily_summary(
 # ---------------------------------------------------------------------------
 
 
+def _reports_filtered(kind: IncidentKind | None, alert_id: int | None):
+    # Archived (soft-deleted) reports are hidden from default listings.
+    stmt = select(IncidentReport).where(IncidentReport.archived_at.is_(None))
+    if kind is not None:
+        stmt = stmt.where(IncidentReport.kind == kind)
+    if alert_id is not None:
+        stmt = stmt.where(IncidentReport.alert_id == alert_id)
+    return stmt
+
+
 async def list_reports(
     session: AsyncSession,
     *,
@@ -338,13 +348,24 @@ async def list_reports(
     limit: int = 50,
     offset: int = 0,
 ) -> list[IncidentReport]:
-    stmt = select(IncidentReport).order_by(desc(IncidentReport.created_at))
-    if kind is not None:
-        stmt = stmt.where(IncidentReport.kind == kind)
-    if alert_id is not None:
-        stmt = stmt.where(IncidentReport.alert_id == alert_id)
-    stmt = stmt.offset(offset).limit(limit)
+    stmt = (
+        _reports_filtered(kind, alert_id)
+        .order_by(desc(IncidentReport.created_at))
+        .offset(offset)
+        .limit(limit)
+    )
     return list((await session.execute(stmt)).scalars().all())
+
+
+async def count_reports(
+    session: AsyncSession,
+    *,
+    kind: IncidentKind | None = None,
+    alert_id: int | None = None,
+) -> int:
+    from app.api.pagination import count_for
+
+    return await count_for(session, _reports_filtered(kind, alert_id))
 
 
 async def get_report(session: AsyncSession, report_id: int) -> IncidentReport | None:

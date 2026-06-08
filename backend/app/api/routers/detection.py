@@ -17,10 +17,11 @@ from __future__ import annotations
 from collections import Counter
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy import select
 
 from app.api.deps import SessionDep, rate_limit
+from app.api.pagination import set_total_count
 from app.core.config import get_settings
 from app.core.errors import AppError, NotFoundError
 from app.models import ModelVersion, NetworkEvent
@@ -267,8 +268,10 @@ async def drift_latest(session: SessionDep) -> DriftReport:
 @router.get("/drift/history")
 async def drift_history(
     session: SessionDep,
+    response: Response,
     limit: Annotated[int, Query(ge=1, le=200)] = 20,
 ) -> DriftHistoryOut:
+    set_total_count(response, await drift_service.count_snapshots(session))
     snapshots = await drift_service.list_snapshots(session, limit=limit)
     return DriftHistoryOut(items=[DriftSnapshotOut.model_validate(s) for s in snapshots])
 

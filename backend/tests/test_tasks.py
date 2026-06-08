@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+
+import pytest
+from fastapi import FastAPI
 from httpx import AsyncClient
 
+from app.api.deps import db_session
 from app.core.queue import NullTaskQueue
 from app.core.security import create_access_token
 from app.models.enums import Role, TaskKind
+from app.services import task_service
 from app.services.task_service import KIND_FUNCTION
 
 
@@ -50,3 +56,25 @@ async def test_retrain_disabled_returns_400(client: AsyncClient) -> None:
     resp = await client.post("/api/v1/tasks/retrain", headers=_headers(Role.ADMIN, "admin"))
     assert resp.status_code == 400
     assert resp.json()["error"]["code"] == "bad_request"
+
+
+async def test_list_tasks_sets_total_count_header(
+    app: FastAPI, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def _dummy_session() -> AsyncIterator[None]:
+        yield None
+
+    app.dependency_overrides[db_session] = _dummy_session
+
+    async def fake_list(session, **kwargs):
+        return []
+
+    async def fake_count(session, **kwargs):
+        return 7
+
+    monkeypatch.setattr(task_service, "list_tasks", fake_list)
+    monkeypatch.setattr(task_service, "count_tasks", fake_count)
+
+    resp = await client.get("/api/v1/tasks", headers=_headers(Role.ANALYST))
+    assert resp.status_code == 200
+    assert resp.headers["x-total-count"] == "7"

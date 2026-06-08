@@ -17,6 +17,12 @@ The machine-readable schema is at `/api/v1/openapi.json`.
   (double-submit). Bearer-header requests are exempt.
 - **All endpoints are rate limited.** Exceeding a limit returns `429` with a
   `Retry-After` header. See [Rate limiting](#rate-limiting).
+- **List endpoints are paginated** via `limit` + `offset` and return the
+  unpaginated total in an **`X-Total-Count`** response header (exposed via CORS).
+  Applies to `alerts`, `reports`, `response`, `ingest/jobs`, `detection/drift/history`,
+  and `tasks`. The frontend uses it for real page counts. Soft-deleted (archived)
+  alerts/reports are excluded from these lists + the count — see
+  [DATA_RETENTION.md](DATA_RETENTION.md).
 
 ## Authentication & roles
 

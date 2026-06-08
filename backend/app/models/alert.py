@@ -63,6 +63,12 @@ class Alert(TimestampMixin, Base):
         Index("ix_alerts_model_version_id", "model_version_id"),
         Index("ix_alerts_priority_desc", text("priority DESC")),
         Index("ix_alerts_disposition_created_at", "disposition", "created_at"),
+        # Partial index speeds the "active (non-archived)" list filter.
+        Index(
+            "ix_alerts_active_created_at",
+            "created_at",
+            postgresql_where=text("archived_at IS NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -111,6 +117,9 @@ class Alert(TimestampMixin, Base):
     investigated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     reported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Soft-delete marker (data retention). Non-NULL ⇒ hidden from default lists
+    # but preserved in the DB for audit. See app.services.retention_service.
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     event: Mapped[NetworkEvent | None] = relationship(back_populates="alerts")
     model_version: Mapped[ModelVersion | None] = relationship(back_populates="alerts")

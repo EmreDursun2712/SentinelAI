@@ -15,6 +15,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, Response, status
 
 from app.api.deps import SessionDep, rate_limit
+from app.api.pagination import set_total_count
 from app.core.errors import NotFoundError
 from app.models.enums import IncidentKind
 from app.schemas.reporting import (
@@ -23,6 +24,7 @@ from app.schemas.reporting import (
     IncidentReportOut,
 )
 from app.services.reporting_service import (
+    count_reports,
     generate_daily_summary,
     get_report,
     list_reports,
@@ -34,11 +36,13 @@ router = APIRouter(prefix="/reports")
 @router.get("")
 async def list_reports_endpoint(
     session: SessionDep,
+    response: Response,
     kind: Annotated[IncidentKind | None, Query()] = None,
     alert_id: Annotated[int | None, Query(ge=1)] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 50,
     offset: Annotated[int, Query(ge=0, le=100_000)] = 0,
 ) -> list[IncidentReportOut]:
+    set_total_count(response, await count_reports(session, kind=kind, alert_id=alert_id))
     rows = await list_reports(session, kind=kind, alert_id=alert_id, limit=limit, offset=offset)
     return [IncidentReportOut.model_validate(r) for r in rows]
 
