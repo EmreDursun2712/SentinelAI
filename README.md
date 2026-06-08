@@ -200,10 +200,22 @@ CI, and pre-commit) so formatting is identical on every machine.
 
 ## Authentication
 
-Every `/api/v1` endpoint requires a JWT except `POST /api/v1/auth/login`
-(`/health`, `/readyz`, `/docs`, and the OpenAPI schema stay public). Authorization
-is method-based RBAC: reads need **VIEWER**+, mutations need **ANALYST**+, and user
-management needs **ADMIN** (`VIEWER < ANALYST < ADMIN`).
+Short-lived **access tokens** (15 min, sent as `Authorization: Bearer`, held in
+memory by the SPA) plus long-lived **refresh-token sessions** in an **httpOnly
+Secure cookie** with server-side revocation. `POST /api/v1/auth/refresh` rotates
+the refresh token; logout / deactivation revoke it. Cookie-authenticated
+mutations are protected by **double-submit CSRF** (`sentinelai_csrf` cookie →
+`X-CSRF-Token` header). No token is ever in `localStorage`. Public endpoints:
+`POST /auth/login`, `POST /auth/refresh`, `/health`, `/readyz`, `/docs`, OpenAPI.
+
+Authorization is method-based RBAC: reads need **VIEWER**+, mutations need
+**ANALYST**+, user management needs **ADMIN** (`VIEWER < ANALYST < ADMIN`). Every
+protected request re-checks `is_active` + token version against the DB, so a
+deactivated or logged-out-everywhere user loses access immediately.
+
+> **Localhost dev:** browsers drop `Secure` cookies over plain HTTP — set
+> `SENTINEL_AUTH_COOKIE_SECURE=false` for non-HTTPS dev (Compose already does).
+> Production keeps the secure default.
 
 Create the first admin on startup by setting **both** env vars (no default user is
 ever created):
@@ -215,8 +227,8 @@ BACKEND_BOOTSTRAP_ADMIN_PASSWORD=<a-strong-password>
 ```
 
 Then open <http://localhost:5173>, sign in, and operate the dashboard. Additional
-users are created by an admin via `POST /api/v1/auth/users`. Full flow and curl
-examples: [docs/API.md](docs/API.md#authentication--roles).
+users are created by an admin via `POST /api/v1/auth/users`. Full flow, cookie /
+SameSite / CSRF behavior, and curl examples: [docs/AUTH.md](docs/AUTH.md).
 
 ## Rate limiting
 

@@ -7,6 +7,7 @@ vi.mock("@/lib/api", () => ({
     me: vi.fn(),
     login: vi.fn(),
     logout: vi.fn(),
+    logoutAll: vi.fn(),
   },
 }));
 
@@ -18,27 +19,44 @@ const wrapper = ({ children }: { children: ReactNode }) => (
   <AuthProvider>{children}</AuthProvider>
 );
 
+const ANALYST_LOGIN = {
+  access_token: "tok",
+  token_type: "bearer",
+  expires_at: "2030-01-01T00:00:00Z",
+  user: { username: "alice", role: "ANALYST" as const },
+};
+
 describe("AuthContext", () => {
   beforeEach(() => {
     clearToken();
     vi.clearAllMocks();
   });
 
-  test("is unauthenticated when no token is stored", async () => {
+  test("unauthenticated when /me rejects (no session/refresh cookie)", async () => {
+    vi.mocked(authApi.me).mockRejectedValue(new Error("401"));
+
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(authApi.me).toHaveBeenCalledOnce();
     expect(result.current.isAuthenticated).toBe(false);
     expect(result.current.user).toBeNull();
-    expect(authApi.me).not.toHaveBeenCalled();
   });
 
-  test("login stores the token and exposes the user + role checks", async () => {
-    vi.mocked(authApi.login).mockResolvedValue({
-      access_token: "tok",
-      token_type: "bearer",
-      expires_at: "2030-01-01T00:00:00Z",
-      user: { username: "alice", role: "ANALYST" },
-    });
+  test("restores the session on mount via /me (cookie-backed refresh)", async () => {
+    vi.mocked(authApi.me).mockResolvedValue({ username: "carol", role: "VIEWER" });
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(authApi.me).toHaveBeenCalledOnce();
+    expect(result.current.user).toEqual({ username: "carol", role: "VIEWER" });
+    expect(result.current.hasRole("ANALYST")).toBe(false);
+  });
+
+  test("login stores the access token and exposes the user + role checks", async () => {
+    vi.mocked(authApi.me).mockRejectedValue(new Error("401"));
+    vi.mocked(authApi.login).mockResolvedValue(ANALYST_LOGIN);
 
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -55,11 +73,10 @@ describe("AuthContext", () => {
     expect(result.current.hasRole("ADMIN")).toBe(false);
   });
 
-  test("logout clears the token and user", async () => {
+  test("logout clears the access token and user", async () => {
+    vi.mocked(authApi.me).mockRejectedValue(new Error("401"));
     vi.mocked(authApi.login).mockResolvedValue({
-      access_token: "tok",
-      token_type: "bearer",
-      expires_at: "2030-01-01T00:00:00Z",
+      ...ANALYST_LOGIN,
       user: { username: "bob", role: "ADMIN" },
     });
     vi.mocked(authApi.logout).mockResolvedValue({ detail: "ok" });
@@ -78,19 +95,6 @@ describe("AuthContext", () => {
     expect(getToken()).toBeNull();
     expect(result.current.user).toBeNull();
     expect(result.current.isAuthenticated).toBe(false);
-  });
-
-  test("validates an existing token on mount via /me", async () => {
-    vi.mocked(authApi.me).mockResolvedValue({ username: "carol", role: "VIEWER" });
-    // Seed a token so the provider attempts validation.
-    const { setToken } = await import("./token");
-    setToken("preexisting");
-
-    const { result } = renderHook(() => useAuth(), { wrapper });
-    await waitFor(() => expect(result.current.loading).toBe(false));
-
-    expect(authApi.me).toHaveBeenCalledOnce();
-    expect(result.current.user).toEqual({ username: "carol", role: "VIEWER" });
-    expect(result.current.hasRole("ANALYST")).toBe(false);
+    expect(authApi.logout).toHaveBeenCalledOnce();
   });
 });

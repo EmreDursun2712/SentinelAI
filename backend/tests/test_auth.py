@@ -19,6 +19,7 @@ from app.api.deps import (
     AuthPrincipal,
     db_session,
     enforce_rbac,
+    get_active_principal,
     get_current_user,
     require_admin,
     require_analyst,
@@ -33,7 +34,8 @@ from app.core.security import (
     verify_password,
 )
 from app.models.enums import Role
-from app.services import user_service
+from app.services import session_service, user_service
+from app.services.session_service import IssuedSession, RotatedSession
 
 # ---------------------------------------------------------------------------
 # Password hashing (pure).
@@ -204,24 +206,77 @@ async def test_health_stays_public(client: AsyncClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Login (DB-backed path, stubbed).
+# Cookie + refresh auth flow (DB-backed path, stubbed session/service).
 # ---------------------------------------------------------------------------
 
 
-async def _dummy_session() -> AsyncIterator[None]:
-    yield None
+class _FakeSession:
+    """Minimal stand-in for AsyncSession: commit/refresh are no-ops."""
+
+    async def commit(self) -> None: ...
+
+    async def refresh(self, _obj) -> None: ...
 
 
-async def test_login_success_issues_token(
+async def _fake_db() -> AsyncIterator[_FakeSession]:
+    yield _FakeSession()
+
+
+def _fake_user(
+    username: str = "alice",
+    role: Role = Role.ANALYST,
+    *,
+    id: int = 1,
+    token_version: int = 1,
+    is_active: bool = True,
+):
+    return SimpleNamespace(
+        username=username, role=role, id=id, token_version=token_version, is_active=is_active
+    )
+
+
+async def _login(
+    app: FastAPI,
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    user=None,
+    refresh_token: str = "refresh-xyz",
+) -> str:
+    """Drive a stubbed login; returns the CSRF cookie value now in the jar."""
+    app.dependency_overrides[db_session] = _fake_db
+    the_user = user or _fake_user()
+
+    async def fake_auth(session, *, username: str, password: str):
+        return the_user
+
+    async def fake_create(db, u, *, user_agent=None, ip=None):
+        return IssuedSession(raw_token=refresh_token, session=SimpleNamespace(id=1))
+
+    monkeypatch.setattr(user_service, "authenticate", fake_auth)
+    monkeypatch.setattr(session_service, "create_session", fake_create)
+
+    resp = await client.post(
+        "/api/v1/auth/login", json={"username": the_user.username, "password": "pw"}
+    )
+    assert resp.status_code == 200
+    return client.cookies.get("sentinelai_csrf")
+
+
+async def test_login_sets_cookies_and_returns_token(
     app: FastAPI, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    app.dependency_overrides[db_session] = _dummy_session
+    app.dependency_overrides[db_session] = _fake_db
 
     async def fake_auth(session, *, username: str, password: str):
         assert username == "alice" and password == "pw"
-        return SimpleNamespace(username="alice", role=Role.ANALYST)
+        return _fake_user("alice", Role.ANALYST, token_version=3)
+
+    async def fake_create(db, user, *, user_agent=None, ip=None):
+        return IssuedSession(raw_token="refresh-xyz", session=SimpleNamespace(id=1))
 
     monkeypatch.setattr(user_service, "authenticate", fake_auth)
+    monkeypatch.setattr(session_service, "create_session", fake_create)
 
     resp = await client.post("/api/v1/auth/login", json={"username": "alice", "password": "pw"})
     assert resp.status_code == 200
@@ -229,15 +284,19 @@ async def test_login_success_issues_token(
     assert body["token_type"] == "bearer"
     assert body["user"] == {"username": "alice", "role": "ANALYST"}
     claims = decode_access_token(body["access_token"])
-    assert claims is not None and claims["sub"] == "alice" and claims["role"] == "ANALYST"
+    assert claims is not None
+    assert claims["sub"] == "alice" and claims["role"] == "ANALYST" and claims["ver"] == 3
 
-    app.dependency_overrides.clear()
+    cookies = " ".join(resp.headers.get_list("set-cookie"))
+    assert "sentinelai_refresh=refresh-xyz" in cookies
+    assert "sentinelai_csrf=" in cookies
+    assert "httponly" in cookies.lower()  # refresh cookie is httpOnly
 
 
 async def test_login_failure_is_401(
     app: FastAPI, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    app.dependency_overrides[db_session] = _dummy_session
+    app.dependency_overrides[db_session] = _fake_db
 
     async def fake_auth(session, *, username: str, password: str):
         return None
@@ -248,7 +307,152 @@ async def test_login_failure_is_401(
     assert resp.status_code == 401
     assert resp.json()["error"]["code"] == "unauthorized"
 
-    app.dependency_overrides.clear()
+
+async def test_refresh_requires_csrf_token(
+    app: FastAPI, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # After login the jar holds the refresh cookie → /refresh is cookie-authed,
+    # so the CSRF middleware demands a matching X-CSRF-Token header.
+    await _login(app, client, monkeypatch)
+    resp = await client.post("/api/v1/auth/refresh")
+    assert resp.status_code == 403
+    assert resp.json()["error"]["code"] == "csrf_failed"
+
+
+async def test_refresh_rotates_with_csrf_token(
+    app: FastAPI, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    csrf = await _login(app, client, monkeypatch)
+
+    async def fake_rotate(db, raw, *, user_agent=None, ip=None):
+        assert raw == "refresh-xyz"
+        return RotatedSession(
+            raw_token="refresh-new",
+            user=_fake_user("alice", Role.ANALYST, token_version=1),
+            session=SimpleNamespace(id=2),
+        )
+
+    monkeypatch.setattr(session_service, "rotate_session", fake_rotate)
+
+    resp = await client.post("/api/v1/auth/refresh", headers={"X-CSRF-Token": csrf})
+    assert resp.status_code == 200
+    assert decode_access_token(resp.json()["access_token"]) is not None
+    assert "sentinelai_refresh=refresh-new" in " ".join(resp.headers.get_list("set-cookie"))
+
+
+async def test_refresh_rejects_revoked_token(
+    app: FastAPI, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    csrf = await _login(app, client, monkeypatch)
+
+    async def fake_rotate(db, raw, *, user_agent=None, ip=None):
+        return None  # revoked / expired / inactive
+
+    monkeypatch.setattr(session_service, "rotate_session", fake_rotate)
+
+    resp = await client.post("/api/v1/auth/refresh", headers={"X-CSRF-Token": csrf})
+    assert resp.status_code == 401
+    # cookies are cleared on a failed refresh
+    assert "sentinelai_refresh=" in " ".join(resp.headers.get_list("set-cookie"))
+
+
+async def test_logout_revokes_session_and_clears_cookies(
+    app: FastAPI, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await _login(app, client, monkeypatch)
+    revoked: dict[str, str] = {}
+
+    async def fake_revoke(db, raw):
+        revoked["raw"] = raw
+        return True
+
+    monkeypatch.setattr(session_service, "revoke_session", fake_revoke)
+
+    # Logout is CSRF-exempt (must always succeed), so no header is needed.
+    resp = await client.post("/api/v1/auth/logout")
+    assert resp.status_code == 200
+    assert revoked["raw"] == "refresh-xyz"
+    assert "sentinelai_refresh=" in " ".join(resp.headers.get_list("set-cookie"))
+
+
+async def test_logout_all_revokes_everything(
+    app: FastAPI, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app.dependency_overrides[db_session] = _fake_db
+    calls: dict[str, int] = {}
+
+    async def fake_get_user(session, username):
+        return _fake_user(username, Role.ADMIN, id=7, token_version=1)
+
+    async def fake_revoke_all(db, user_id):
+        calls["uid"] = user_id
+        return 3
+
+    monkeypatch.setattr(user_service, "get_user_by_username", fake_get_user)
+    monkeypatch.setattr(session_service, "revoke_all_for_user", fake_revoke_all)
+
+    resp = await client.post("/api/v1/auth/logout-all", headers=_headers(Role.ADMIN, "adminuser"))
+    assert resp.status_code == 200
+    assert calls["uid"] == 7
+    assert "sentinelai_refresh=" in " ".join(resp.headers.get_list("set-cookie"))
+
+
+# ---------------------------------------------------------------------------
+# get_active_principal: per-request is_active + token_version enforcement.
+# ---------------------------------------------------------------------------
+
+
+async def test_active_principal_accepts_active_matching_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_active(session, username):
+        return _fake_user(username, Role.ANALYST, token_version=2)
+
+    monkeypatch.setattr(user_service, "get_active_user", fake_active)
+    principal = await get_active_principal(
+        AuthPrincipal("alice", Role.VIEWER, token_version=2), session=None
+    )
+    assert principal.username == "alice"
+    assert principal.role == Role.ANALYST  # role reflects the live DB value
+    assert principal.token_version == 2
+
+
+async def test_active_principal_rejects_inactive_or_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_active(session, username):
+        return None
+
+    monkeypatch.setattr(user_service, "get_active_user", fake_active)
+    with pytest.raises(UnauthorizedError):
+        await get_active_principal(AuthPrincipal("x", Role.VIEWER, token_version=1), session=None)
+
+
+async def test_active_principal_rejects_token_version_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_active(session, username):
+        return _fake_user(username, Role.ANALYST, token_version=5)
+
+    monkeypatch.setattr(user_service, "get_active_user", fake_active)
+    with pytest.raises(UnauthorizedError):
+        await get_active_principal(AuthPrincipal("x", Role.ANALYST, token_version=1), session=None)
+
+
+async def test_protected_endpoint_rejects_deactivated_user(
+    app: FastAPI, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Use the REAL active check (drop the conftest passthrough override) and a
+    # stub DB whose lookup reports the account as inactive/missing.
+    app.dependency_overrides.pop(get_active_principal, None)
+    app.dependency_overrides[db_session] = _fake_db
+
+    async def fake_active(session, username):
+        return None
+
+    monkeypatch.setattr(user_service, "get_active_user", fake_active)
+    resp = await client.get("/api/v1/alerts", headers=_headers(Role.ANALYST))
+    assert resp.status_code == 401
 
 
 # ---------------------------------------------------------------------------

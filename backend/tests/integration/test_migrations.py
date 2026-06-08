@@ -28,6 +28,7 @@ pytestmark = pytest.mark.integration
 EXPECTED_TABLES = {
     "alembic_version",
     "users",
+    "auth_sessions",
     "ingestion_jobs",
     "network_events",
     "model_versions",

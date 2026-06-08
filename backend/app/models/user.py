@@ -13,7 +13,9 @@ from __future__ import annotations
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    Integer,
     String,
+    text,
     true,
 )
 from sqlalchemy import (
@@ -40,4 +42,10 @@ class User(TimestampMixin, Base):
     )
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=true()
+    )
+    # Bumped to invalidate every outstanding access token for this user at once
+    # (logout-all, deactivation). Access tokens carry this as a ``ver`` claim,
+    # checked per protected request against the live value.
+    token_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default=text("1")
     )

@@ -15,6 +15,7 @@ from app.core.logging import get_logger
 from app.core.security import get_password_hash, verify_password
 from app.models import User
 from app.models.enums import Role
+from app.services import session_service
 
 logger = get_logger(__name__)
 
@@ -22,6 +23,18 @@ logger = get_logger(__name__)
 async def get_user_by_username(session: AsyncSession, username: str) -> User | None:
     result = await session.execute(select(User).where(User.username == username))
     return result.scalar_one_or_none()
+
+
+async def get_active_user(session: AsyncSession, username: str) -> User | None:
+    """Return the user only if it exists and is active; else ``None``.
+
+    Used on the protected hot path to enforce ``is_active`` on every request, so
+    a deactivated account loses access immediately rather than at token expiry.
+    """
+    user = await get_user_by_username(session, username.strip())
+    if user is None or not user.is_active:
+        return None
+    return user
 
 
 async def create_user(
@@ -76,6 +89,25 @@ async def authenticate(session: AsyncSession, *, username: str, password: str) -
         return None
     if not verify_password(password, user.password_hash):
         return None
+    return user
+
+
+async def deactivate_user(session: AsyncSession, username: str) -> User | None:
+    """Deactivate ``username`` and lock them out immediately.
+
+    Sets ``is_active=False``, bumps ``token_version`` (invalidating every
+    outstanding access token), and revokes all refresh sessions. Returns the
+    user, or ``None`` if no such user. Idempotent.
+    """
+    user = await get_user_by_username(session, username.strip())
+    if user is None:
+        return None
+    user.is_active = False
+    user.token_version += 1
+    await session_service.revoke_all_for_user(session, user.id)
+    await session.commit()
+    await session.refresh(user)
+    logger.info("user.deactivated", username=user.username)
     return user
 
 

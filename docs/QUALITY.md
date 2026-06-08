@@ -20,10 +20,10 @@ known weak points, and the pre-demo checklist that keeps that budget intact.
 | Backend API      | `tests/test_health.py`           |     6 | optional |   **yes**     | `pytest tests/test_health.py`                                 |
 | Frontend unit    | `src/**/*.test.{ts,tsx}`         |    29 |   no     |    no         | `npm test`                                                    |
 | End-to-end smoke | `infra/scripts/smoke_demo.sh`    |    11 |  **yes** |   **yes**     | `bash infra/scripts/smoke_demo.sh` (needs running stack)      |
-| Integration      | `tests/integration/**`           |    32 | **real** |    no         | `pytest -m integration` (needs **Docker** — see §1.1)        |
+| Integration      | `tests/integration/**`           |    40 | **real** |    no         | `pytest -m integration` (needs **Docker** — see §1.1)        |
 
-**Totals**: 142 pure-Python backend tests + 29 frontend tests + 11 e2e checks,
-plus 32 real-Postgres integration tests on a separate `-m integration` lane.
+**Totals**: backend unit + frontend + e2e checks, plus 40 real-Postgres
+integration tests on a separate `-m integration` lane.
 
 ### Running everything
 

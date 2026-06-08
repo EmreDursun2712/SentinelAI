@@ -21,6 +21,7 @@ class UserOut(BaseModel):
     username: str
     role: Role
     is_active: bool
+    token_version: int
     created_at: datetime
     updated_at: datetime
 

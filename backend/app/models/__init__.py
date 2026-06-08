@@ -8,6 +8,7 @@ added here to be discoverable.
 from app.models.agent_decision import AgentDecision
 from app.models.alert import Alert
 from app.models.alert_artifact import AlertArtifact
+from app.models.auth_session import AuthSession
 from app.models.enums import (
     AgentName,
     AlertDisposition,
@@ -41,6 +42,7 @@ __all__ = [
     "AlertDisposition",
     "AlertStatus",
     "ArtifactKind",
+    "AuthSession",
     "CreatedAtMixin",
     "DriftStatus",
     "ExecutionMode",

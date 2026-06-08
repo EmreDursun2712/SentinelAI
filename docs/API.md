@@ -8,34 +8,52 @@ The machine-readable schema is at `/api/v1/openapi.json`.
 
 - JSON in, JSON out. All bodies are UTF-8 JSON.
 - Every response carries an `X-Request-ID` header. If the client sends one, it is preserved.
-- **Every `/api/v1` endpoint requires a JWT** (`Authorization: Bearer <token>`), except
-  `POST /api/v1/auth/login`. `/health`, `/readyz`, `/docs`, `/redoc`, and
-  `/api/v1/openapi.json` stay public. See [Authentication & roles](#authentication--roles).
+- **Every `/api/v1` endpoint requires authentication** (`Authorization: Bearer <access token>`),
+  except `POST /api/v1/auth/login` and `POST /api/v1/auth/refresh`. `/health`, `/readyz`,
+  `/docs`, `/redoc`, and `/api/v1/openapi.json` stay public. See
+  [Authentication & roles](#authentication--roles).
+- **Cookie-authenticated mutations need CSRF.** Unsafe methods on a request carrying an auth
+  cookie must send the readable `sentinelai_csrf` cookie back in an `X-CSRF-Token` header
+  (double-submit). Bearer-header requests are exempt.
 - **All endpoints are rate limited.** Exceeding a limit returns `429` with a
   `Retry-After` header. See [Rate limiting](#rate-limiting).
 
 ## Authentication & roles
 
-Obtain a token from `POST /api/v1/auth/login`, then send it as a Bearer header on every
-request. Authorization is **method-based RBAC**: reads need `VIEWER`+, mutations need
-`ANALYST`+, and a few endpoints require `ADMIN`. Roles are ranked `VIEWER < ANALYST < ADMIN`,
-so a higher role satisfies any lower requirement.
+Auth is **short-lived access tokens + refresh-token sessions** with cookies and
+revocation. `POST /api/v1/auth/login` returns an access token in the body and sets the
+httpOnly `sentinelai_refresh` + readable `sentinelai_csrf` cookies. Send the access token as
+a Bearer header; when it expires, `POST /api/v1/auth/refresh` (cookie + `X-CSRF-Token`)
+rotates the refresh token and returns a new access token. Authorization is **method-based
+RBAC**: reads need `VIEWER`+, mutations need `ANALYST`+, a few require `ADMIN`
+(`VIEWER < ANALYST < ADMIN`). Full detail in [AUTH.md](AUTH.md).
 
-| Method | Path                    | Role    | Purpose                                          |
-| ------ | ----------------------- | ------- | ------------------------------------------------ |
-| POST   | `/api/v1/auth/login`    | public  | Exchange username/password for a JWT             |
-| GET    | `/api/v1/auth/me`       | any     | Current identity (decoded from the token)        |
-| POST   | `/api/v1/auth/logout`   | any     | Stateless no-op; client discards its token       |
-| POST   | `/api/v1/auth/users`    | ADMIN   | Create a user `{username, password, role}`       |
+| Method | Path                                          | Role    | Purpose                                              |
+| ------ | --------------------------------------------- | ------- | --------------------------------------------------- |
+| POST   | `/api/v1/auth/login`                          | public  | Credentials → access token (body) + refresh/CSRF cookies |
+| POST   | `/api/v1/auth/refresh`                        | cookie+CSRF | Rotate refresh token → new access token         |
+| POST   | `/api/v1/auth/logout`                         | cookie  | Revoke the current session, clear cookies           |
+| POST   | `/api/v1/auth/logout-all`                     | any     | Revoke all sessions + invalidate access tokens      |
+| GET    | `/api/v1/auth/me`                             | any     | Current identity (enforces `is_active`)             |
+| POST   | `/api/v1/auth/users`                          | ADMIN   | Create a user `{username, password, role}`          |
+| POST   | `/api/v1/auth/users/{username}/deactivate`    | ADMIN   | Deactivate: lock login, revoke sessions, invalidate tokens |
+
+Per-request auth is **DB-backed**: each protected call re-checks the account is active and
+the token's `ver` matches the live `token_version`, so deactivation / logout-all takes effect
+immediately rather than at token expiry.
 
 ```bash
-# 1. Log in
-TOKEN=$(curl -fsS localhost:8000/api/v1/auth/login \
+# 1. Log in (jar stores the refresh + CSRF cookies)
+TOKEN=$(curl -fsS -c jar localhost:8000/api/v1/auth/login \
   -H 'content-type: application/json' \
   -d '{"username":"admin","password":"<your-admin-pw>"}' | jq -r .access_token)
 
-# 2. Call protected endpoints
+# 2. Call protected endpoints with the access token
 curl -fsS localhost:8000/api/v1/alerts -H "Authorization: Bearer $TOKEN"
+
+# 3. Refresh when it expires (cookie auth → send the CSRF token in a header)
+CSRF=$(grep sentinelai_csrf jar | awk '{print $NF}')
+curl -fsS -b jar -c jar -X POST localhost:8000/api/v1/auth/refresh -H "X-CSRF-Token: $CSRF"
 ```
 
 Role policy by endpoint family:

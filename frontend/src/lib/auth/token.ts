@@ -1,51 +1,42 @@
-// Access-token storage.
+// Access-token storage — IN MEMORY ONLY (no localStorage/sessionStorage).
 //
-// We store the JWT in localStorage. An httpOnly cookie would be more
-// XSS-resistant, but it requires server-set cookies + CSRF protection — a
-// larger change than this etap. To keep the localStorage approach defensible:
-//   - the token lives under a single, namespaced key and nothing else;
-//   - it is read only here and attached as a Bearer header by the API client;
-//   - it is never written to logs or the DOM;
-//   - the React app sets a strict-ish surface (no dangerouslySetInnerHTML on
-//     user data), keeping the XSS attack surface small.
-// Rotate to httpOnly cookies if this ever leaves the classroom/lab.
+// The access token is short-lived and held only in this module variable, so it
+// never survives a reload and is never exposed to other tabs or to XSS via
+// storage. The durable session lives in an httpOnly refresh cookie the JS can't
+// read; on reload the API client silently calls /auth/refresh to mint a new
+// access token from that cookie. The token is attached as a Bearer header by the
+// API client and is also used to authenticate the WebSocket (?token=).
 
-const TOKEN_KEY = "sentinelai.access_token";
-
-// In-memory mirror so a single render pass doesn't hit localStorage repeatedly,
-// and so the app keeps working if storage is unavailable (private mode, etc.).
-let cached: string | null | undefined;
+let accessToken: string | null = null;
 
 export function getToken(): string | null {
-  if (cached !== undefined) return cached;
-  try {
-    cached = localStorage.getItem(TOKEN_KEY);
-  } catch {
-    cached = null;
-  }
-  return cached;
+  return accessToken;
 }
 
 export function setToken(token: string): void {
-  cached = token;
-  try {
-    localStorage.setItem(TOKEN_KEY, token);
-  } catch {
-    // Storage unavailable — fall back to the in-memory mirror for this session.
-  }
+  accessToken = token;
 }
 
 export function clearToken(): void {
-  cached = null;
-  try {
-    localStorage.removeItem(TOKEN_KEY);
-  } catch {
-    // ignore
+  accessToken = null;
+}
+
+// ----- CSRF (double-submit) ------------------------------------------------
+
+const CSRF_COOKIE = "sentinelai_csrf";
+
+/** Read the readable CSRF cookie set by the backend, or null if absent. */
+export function getCsrfToken(): string | null {
+  if (typeof document === "undefined") return null;
+  for (const part of document.cookie.split(";")) {
+    const [name, ...rest] = part.trim().split("=");
+    if (name === CSRF_COOKIE) return decodeURIComponent(rest.join("="));
   }
+  return null;
 }
 
 // Broadcast name used by the API client to tell the AuthProvider that the
-// server rejected our token (401) so it can drop the session and redirect.
+// session is gone (refresh failed) so it can drop state and redirect.
 export const UNAUTHORIZED_EVENT = "sentinelai:unauthorized";
 
 export function notifyUnauthorized(): void {

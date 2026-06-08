@@ -24,6 +24,7 @@ from app.api.routers import (
     stream,
 )
 from app.core.config import get_settings
+from app.core.csrf import CsrfMiddleware
 from app.core.db import dispose_engine, get_session, init_engine
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging, get_logger
@@ -176,8 +177,12 @@ def create_app() -> FastAPI:
         redoc_url="/redoc",
     )
 
-    # Order matters: request_id first so error responses can include it,
-    # CORS outermost so preflight responses also carry CORS headers.
+    # Order matters (last added = outermost). Resulting request flow:
+    #   CORS → RequestId → CSRF → app
+    # CORS outermost so preflight responses carry CORS headers; RequestId next so
+    # a request_id is bound before CSRF can reject; CSRF innermost guards
+    # cookie-authenticated mutations just before the handler.
+    app.add_middleware(CsrfMiddleware)
     app.add_middleware(RequestIdMiddleware)
     app.add_middleware(
         CORSMiddleware,

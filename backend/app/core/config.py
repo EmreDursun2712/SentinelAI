@@ -26,7 +26,20 @@ class Settings(BaseSettings):
     api_key: str = "dev-api-key-change-me"
     jwt_secret: str = "dev-jwt-secret-change-me"
     jwt_algorithm: str = "HS256"
+    # Short-lived access token (Bearer). Refresh tokens (below) carry the long
+    # session. ``jwt_ttl_minutes`` is kept as a back-compat alias/default source.
     jwt_ttl_minutes: int = 60 * 12
+    access_token_ttl_minutes: int = 15
+    refresh_token_ttl_days: int = 7
+
+    # Cookie-based auth. The refresh token lives in an httpOnly Secure cookie; a
+    # readable CSRF cookie pairs with an X-CSRF-Token header (double-submit) to
+    # protect cookie-authenticated mutations. Production defaults are secure;
+    # local non-HTTPS dev must set SENTINEL_AUTH_COOKIE_SECURE=false (the browser
+    # silently drops Secure cookies over http://localhost otherwise).
+    auth_cookie_secure: bool = True
+    auth_cookie_samesite: str = "lax"  # lax | strict | none  (none ⇒ must be secure)
+    auth_cookie_domain: str | None = None
 
     # Bootstrap admin — created once on startup if both are set. If either is
     # missing, NO default user is created (no hardcoded credentials ever ship).

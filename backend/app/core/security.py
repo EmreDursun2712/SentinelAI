@@ -1,13 +1,17 @@
-"""Password hashing, API-key, and JWT helpers.
+"""Password hashing, API-key, JWT, and refresh-token helpers.
 
-Authentication is stateless JWT. ``create_access_token`` mints a signed token
-carrying ``sub`` (username) and ``role``; ``decode_access_token`` validates the
-signature and expiry. Passwords are hashed with bcrypt via passlib — the
+Access tokens are short-lived signed JWTs carrying ``sub`` (username), ``role``,
+and ``ver`` (the user's token version); ``decode_access_token`` validates the
+signature and expiry. Long-lived **refresh tokens** are opaque random strings —
+only their SHA-256 hash is stored (see ``hash_refresh_token``), so a database
+leak never exposes a usable token. Passwords are bcrypt-hashed via passlib; the
 plaintext is never stored or logged.
 """
 
 from __future__ import annotations
 
+import hashlib
+import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -36,7 +40,26 @@ def verify_password(plain_password: str, password_hash: str) -> bool:
 
 
 def access_token_ttl() -> timedelta:
-    return timedelta(minutes=get_settings().jwt_ttl_minutes)
+    return timedelta(minutes=get_settings().access_token_ttl_minutes)
+
+
+def refresh_token_ttl() -> timedelta:
+    return timedelta(days=get_settings().refresh_token_ttl_days)
+
+
+def generate_refresh_token() -> str:
+    """Return a fresh, URL-safe opaque refresh token (≈256 bits of entropy)."""
+    return secrets.token_urlsafe(32)
+
+
+def hash_refresh_token(token: str) -> str:
+    """Return the SHA-256 hex digest stored for ``token``.
+
+    Refresh tokens are high-entropy randoms (not passwords), so a fast,
+    deterministic hash is the right tool: it lets us look the token up by hash
+    while never persisting the value itself. Constant-time compare on lookup.
+    """
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def create_access_token(
