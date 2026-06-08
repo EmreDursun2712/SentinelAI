@@ -16,12 +16,18 @@ async def test_health_always_ok(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_readyz_returns_status_and_db(client: AsyncClient) -> None:
+async def test_readyz_reports_structured_dependency_checks(client: AsyncClient) -> None:
     response = await client.get("/readyz")
     assert response.status_code in (200, 503)
     body = response.json()
     assert body["status"] in ("ready", "not_ready")
-    assert body["db"] in ("ok", "down")
+    checks = body["checks"]
+    assert checks["database"]["status"] in ("ok", "down")
+    assert checks["database"]["required"] is True
+    # Redis + model are always reported (model is informational / not required).
+    assert "redis" in checks
+    assert checks["model"]["status"] in ("loaded", "unavailable")
+    assert checks["model"]["required"] is False
 
 
 @pytest.mark.asyncio

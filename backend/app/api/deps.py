@@ -18,6 +18,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Annotated
 
+import structlog
 from fastapi import Cookie, Depends, Header, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -117,6 +118,10 @@ async def get_active_principal(principal: CurrentUser, session: SessionDep) -> A
         raise UnauthorizedError("Account is inactive or no longer exists.")
     if principal.token_version is not None and principal.token_version != user.token_version:
         raise UnauthorizedError("Token has been revoked. Please sign in again.")
+    # Bind safe identity onto the structlog context so every log line for this
+    # request carries who made it. Never bind tokens/passwords. Cleared per
+    # request by RequestIdMiddleware.
+    structlog.contextvars.bind_contextvars(user=user.username, role=user.role.value)
     return AuthPrincipal(username=user.username, role=user.role, token_version=user.token_version)
 
 

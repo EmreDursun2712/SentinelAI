@@ -10,7 +10,7 @@ The machine-readable schema is at `/api/v1/openapi.json`.
 - Every response carries an `X-Request-ID` header. If the client sends one, it is preserved.
 - **Every `/api/v1` endpoint requires authentication** (`Authorization: Bearer <access token>`),
   except `POST /api/v1/auth/login` and `POST /api/v1/auth/refresh`. `/health`, `/readyz`,
-  `/docs`, `/redoc`, and `/api/v1/openapi.json` stay public. See
+  `/metrics`, `/docs`, `/redoc`, and `/api/v1/openapi.json` stay public. See
   [Authentication & roles](#authentication--roles).
 - **Cookie-authenticated mutations need CSRF.** Unsafe methods on a request carrying an auth
   cookie must send the readable `sentinelai_csrf` cookie back in an `X-CSRF-Token` header
@@ -142,7 +142,22 @@ Every non-2xx response has this shape:
 | Method | Path       | Codes      | Purpose                                                |
 | ------ | ---------- | ---------- | ------------------------------------------------------ |
 | GET    | `/health`  | 200        | Liveness — always 200 while the process is running    |
-| GET    | `/readyz`  | 200, 503   | Readiness — 503 if any dependency (DB) is unreachable |
+| GET    | `/readyz`  | 200, 503   | Readiness — structured `checks` (database/redis/model); 503 if a required dependency is down |
+| GET    | `/metrics` | 200        | Prometheus exposition (public; restrict at the network — see [DEPLOYMENT_SECURITY.md](DEPLOYMENT_SECURITY.md)) |
+
+`/readyz` body:
+
+```json
+{
+  "status": "ready",
+  "version": "0.1.0",
+  "checks": {
+    "database": { "status": "ok", "required": true },
+    "redis": { "status": "ok", "backend": "redis", "required": true },
+    "model": { "status": "loaded", "required": false, "name": "rf", "version": "v1" }
+  }
+}
+```
 
 ## Endpoints (Phase 0 scaffolding — full behavior lands in later phases)
 

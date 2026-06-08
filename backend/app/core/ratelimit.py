@@ -114,6 +114,8 @@ class RateLimiter(Protocol):
 
     async def hit(self, key: str, policy: Policy) -> RateLimitResult: ...
 
+    async def ping(self) -> bool: ...
+
     async def aclose(self) -> None: ...
 
 
@@ -124,6 +126,9 @@ class NoopRateLimiter:
 
     async def hit(self, key: str, policy: Policy) -> RateLimitResult:
         return RateLimitResult(True, policy.limit, policy.limit, 0)
+
+    async def ping(self) -> bool:
+        return True
 
     async def aclose(self) -> None:
         return None
@@ -151,6 +156,9 @@ class InMemoryRateLimiter:
                 return RateLimitResult(True, policy.limit, policy.limit - len(dq), 0)
             retry = max(1, math.ceil(dq[0] + policy.window_seconds - now))
             return RateLimitResult(False, policy.limit, 0, retry)
+
+    async def ping(self) -> bool:
+        return True
 
     async def aclose(self) -> None:
         self._hits.clear()
@@ -204,6 +212,14 @@ class RedisRateLimiter:
             return RateLimitResult(True, policy.limit, policy.limit, 0)
         allowed, remaining, retry = int(res[0]), int(res[1]), int(res[2])
         return RateLimitResult(bool(allowed), policy.limit, remaining, retry)
+
+    async def ping(self) -> bool:
+        try:
+            await self._client.ping()
+            return True
+        except Exception as exc:
+            logger.warning("ratelimit.redis_ping_failed", error=str(exc))
+            return False
 
     async def aclose(self) -> None:
         with contextlib.suppress(Exception):  # best effort on shutdown

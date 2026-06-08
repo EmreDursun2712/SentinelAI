@@ -28,6 +28,7 @@ from app.core.config import Settings, get_settings
 from app.core.errors import AppError
 from app.core.events import EventType, publish_event
 from app.core.logging import get_logger
+from app.core.metrics import RESPONSE_ACTIONS
 from app.models import AgentDecision, Alert, ResponseAction
 from app.models.enums import (
     AgentName,
@@ -156,8 +157,10 @@ async def recommend_for_alert(
         if not approval_required and rec.auto_execute:
             await _run_executor(session, action, alert, settings)
             has_auto_executed = True
+            RESPONSE_ACTIONS.labels(status="executed", type=action.action_type.value).inc()
         else:
             has_pending = True
+            RESPONSE_ACTIONS.labels(status="pending", type=action.action_type.value).inc()
 
     # Advance alert state only if we're still in the agent workflow.
     alert.responded_at = datetime.now(UTC)
@@ -251,6 +254,7 @@ async def approve_action(
     # SIMULATED; the configured lab executor for LAB). Validation failures (e.g.
     # target outside the lab CIDRs) raise and leave the action PENDING.
     await _run_executor(session, action, alert, get_settings())
+    RESPONSE_ACTIONS.labels(status="executed", type=action.action_type.value).inc()
 
     _append_analyst_decision(
         session,
@@ -299,6 +303,7 @@ async def reject_action(
     action.status = ResponseStatus.REJECTED
     action.rejection_reason = reason.strip()
     action.approved_by = analyst_id
+    RESPONSE_ACTIONS.labels(status="rejected", type=action.action_type.value).inc()
 
     _append_analyst_decision(
         session,

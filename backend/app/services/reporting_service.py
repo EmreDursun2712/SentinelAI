@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.events import EventType, publish_event
 from app.core.logging import get_logger
+from app.core.metrics import REPORTS
 from app.models import (
     AgentDecision,
     Alert,
@@ -179,6 +180,7 @@ async def generate_alert_report(
         actions=len(actions),
     )
     if commit:
+        REPORTS.labels(kind="PER_ALERT").inc()
         await publish_event(
             EventType.REPORT_CREATED,
             {"report_id": report.id, "alert_id": alert.id, "kind": "PER_ALERT"},
@@ -311,6 +313,7 @@ async def generate_daily_summary(
         total_alerts=total_alerts,
     )
     if commit:
+        REPORTS.labels(kind="DAILY_SUMMARY").inc()
         await publish_event(
             EventType.REPORT_CREATED,
             {

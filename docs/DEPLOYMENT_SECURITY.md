@@ -169,7 +169,25 @@ Triage and handling guidance is in [../SECURITY.md](../SECURITY.md).
 
 ---
 
-## 7. Production checklist
+## 7. Observability endpoints
+
+| Endpoint | Auth | Notes |
+| --- | --- | --- |
+| `GET /metrics` | none | Prometheus exposition. **Restrict at the network** (internal scrape target / proxy allow-list) — don't expose it publicly. Set `SENTINEL_METRICS_ENABLED=false` to disable. |
+| `GET /readyz` | none | Structured dependency status (DB/Redis/model); `503` when a required dep is down. |
+| `GET /health` | none | Liveness only. |
+
+Do **not** proxy `/metrics` through the public vhost. In the Nginx example,
+either omit it from the public `server` block or gate it:
+
+```nginx
+location = /metrics { allow 10.0.0.0/8; deny all; proxy_pass http://backend:8000; }
+```
+
+Tracing (OpenTelemetry) is opt-in and no-op unless `SENTINEL_OTEL_ENABLED=true`
+with the `otel` extra installed and an OTLP endpoint configured.
+
+## 8. Production checklist
 
 ```text
 ☐ SENTINEL_ENV=production
@@ -180,5 +198,7 @@ Triage and handling guidance is in [../SECURITY.md](../SECURITY.md).
 ☐ TLS terminating proxy in front; HTTP→HTTPS redirect
 ☐ HSTS active (auto in prod) once HTTPS is verified
 ☐ Bootstrap admin password meets the policy; rotated from the example
+☐ /metrics not publicly exposed (network-restricted)
+☐ Database backups scheduled + verified (see docs/BACKUP_DR.md)
 ☐ pip-audit / npm audit clean (or documented exceptions)
 ```

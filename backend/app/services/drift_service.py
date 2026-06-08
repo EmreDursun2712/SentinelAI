@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
+from app.core.metrics import DRIFT_RUNS, DRIFT_SCORE
 from app.models import Alert, ModelDriftSnapshot, ModelVersion, NetworkEvent
 from app.models.enums import DriftStatus
 from app.services.model_registry import ModelBundle, get_model_registry
@@ -300,6 +301,9 @@ async def run_drift_check(
     if commit:
         await session.commit()
         await session.refresh(snapshot)
+
+    DRIFT_SCORE.set(drift_score)
+    DRIFT_RUNS.labels(status=status.value).inc()
 
     logger.info(
         "drift.checked",

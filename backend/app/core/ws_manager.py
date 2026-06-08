@@ -15,6 +15,7 @@ from fastapi import WebSocket
 
 from app.core.events import Event, get_event_bus
 from app.core.logging import get_logger
+from app.core.metrics import WS_CONNECTIONS
 
 logger = get_logger(__name__)
 
@@ -33,10 +34,12 @@ class ConnectionManager:
 
     async def add(self, websocket: WebSocket) -> None:
         self._clients.add(websocket)
+        WS_CONNECTIONS.set(len(self._clients))
         logger.info("ws.connected", clients=len(self._clients))
 
     async def remove(self, websocket: WebSocket) -> None:
         self._clients.discard(websocket)
+        WS_CONNECTIONS.set(len(self._clients))
         logger.info("ws.disconnected", clients=len(self._clients))
 
     @property

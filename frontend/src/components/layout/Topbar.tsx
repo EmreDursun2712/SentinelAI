@@ -5,6 +5,7 @@ import { ConnectionPill } from "@/components/ConnectionPill";
 import { Button } from "@/components/ui/Button";
 import { healthApi } from "@/lib/api";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { checkLabel, isCheckHealthy } from "@/lib/readiness";
 import { useStreamStatus } from "@/lib/stream/StreamProvider";
 
 const TITLES: Record<string, string> = {
@@ -43,6 +44,7 @@ export function Topbar() {
     queryFn: healthApi.readyz,
     refetchInterval: 30_000,
   });
+  const checks = readyQ.data?.checks;
 
   return (
     <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-800 bg-slate-950/60 px-6">
@@ -60,9 +62,19 @@ export function Topbar() {
           value={healthQ.data?.status ?? (healthQ.isError ? "down" : "…")}
         />
         <ConnectionPill
-          ok={!readyQ.isError && readyQ.data?.db === "ok"}
+          ok={!readyQ.isError && isCheckHealthy(checks?.database)}
           label="Database"
-          value={readyQ.data?.db ?? (readyQ.isError ? "down" : "…")}
+          value={checkLabel(checks?.database, readyQ.isError ? "down" : "…")}
+        />
+        <ConnectionPill
+          ok={!readyQ.isError && isCheckHealthy(checks?.redis)}
+          label="Redis"
+          value={checkLabel(checks?.redis, readyQ.isError ? "down" : "…")}
+        />
+        <ConnectionPill
+          ok={!readyQ.isError && isCheckHealthy(checks?.model)}
+          label="Model"
+          value={checkLabel(checks?.model, readyQ.isError ? "down" : "…")}
         />
         <ConnectionPill
           ok={live}

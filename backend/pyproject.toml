@@ -35,9 +35,19 @@ dependencies = [
     "scikit-learn==1.9.0",
     "joblib>=1.4",
     "redis>=5.0",
+    "prometheus-client>=0.20",
 ]
 
 [project.optional-dependencies]
+# OpenTelemetry tracing is optional + no-op unless configured. Install with
+# `pip install -e ".[otel]"` and set SENTINEL_OTEL_ENABLED=true to activate.
+otel = [
+    "opentelemetry-sdk>=1.27",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.27",
+    "opentelemetry-instrumentation-fastapi>=0.48b0",
+    "opentelemetry-instrumentation-sqlalchemy>=0.48b0",
+    "opentelemetry-instrumentation-httpx>=0.48b0",
+]
 dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",

@@ -3,6 +3,9 @@
 .env.local
 *.env.local
 
+# Database backups (pg_dump output)
+backups/
+
 # Python
 __pycache__/
 *.py[cod]

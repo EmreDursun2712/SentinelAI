@@ -53,6 +53,14 @@ class Settings(BaseSettings):
     security_headers_enabled: bool = True
     security_hsts_enabled: bool = False
 
+    # Observability. Prometheus /metrics is always on (cheap, public — restrict
+    # at the network in prod). OpenTelemetry tracing is opt-in + no-op unless
+    # both enabled and the otel extra is installed (see app.core.tracing).
+    metrics_enabled: bool = True
+    otel_enabled: bool = False
+    otel_exporter_otlp_endpoint: str | None = None
+    otel_service_name: str = "sentinelai-backend"
+
     # Bootstrap admin — created once on startup if both are set. If either is
     # missing, NO default user is created (no hardcoded credentials ever ship).
     # The password must satisfy the password policy (see app.core.password_policy).

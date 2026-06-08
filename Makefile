@@ -54,6 +54,17 @@ reset: ## Wipe the database volume and restart fresh (DESTRUCTIVE).
 	docker compose down -v
 	docker compose up -d
 
+# ---------- backup / restore ----------
+
+.PHONY: backup-db
+backup-db: ## Dump the database to backups/sentinelai-<ts>.sql.gz.
+	bash $(SCRIPTS)/backup_db.sh
+
+.PHONY: restore-db
+restore-db: ## Restore from a dump: make restore-db BACKUP=backups/<file>.sql.gz (DESTRUCTIVE).
+	@[ -n "$(BACKUP)" ] || { echo "usage: make restore-db BACKUP=backups/<file>.sql.gz"; exit 2; }
+	bash $(SCRIPTS)/restore_db.sh "$(BACKUP)"
+
 # ---------- one-command demo prep ----------
 
 .PHONY: bootstrap

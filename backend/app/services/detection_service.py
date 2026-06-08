@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.events import EventType, publish_event
 from app.core.logging import get_logger
+from app.core.metrics import DETECTION_ALERTS, DETECTION_EVENTS, DETECTION_RUNS
 from app.models import (
     AgentDecision,
     Alert,
@@ -326,6 +327,9 @@ async def detect_events(
 
     await session.commit()
     n_alerts = sum(1 for p in predictions if p.alert_created)
+    DETECTION_RUNS.inc()
+    DETECTION_EVENTS.inc(len(events))
+    DETECTION_ALERTS.inc(n_alerts)
     logger.info(
         "detection.completed",
         n_events=len(events),

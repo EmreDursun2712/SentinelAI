@@ -25,9 +25,10 @@ from app.api.routers import (
 )
 from app.core.config import get_settings
 from app.core.csrf import CsrfMiddleware
-from app.core.db import dispose_engine, get_session, init_engine
+from app.core.db import dispose_engine, get_engine, get_session, init_engine
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging, get_logger
+from app.core.metrics import MetricsMiddleware
 from app.core.middleware import RequestIdMiddleware
 from app.core.ratelimit import (
     InMemoryRateLimiter,
@@ -37,6 +38,7 @@ from app.core.ratelimit import (
     set_rate_limiter,
 )
 from app.core.security_headers import SecurityHeadersMiddleware, validate_cors_origins
+from app.core.tracing import setup_tracing
 from app.core.ws_manager import get_connection_manager
 from app.services.model_registry import get_model_registry
 from app.services.user_service import ensure_bootstrap_admin
@@ -47,10 +49,14 @@ API_V1_PREFIX = "/api/v1"
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     configure_logging(settings.log_level)
     init_engine(settings.database_url)
+
+    # OpenTelemetry tracing (opt-in + no-op unless configured). After init_engine
+    # so the SQLAlchemy engine can be instrumented.
+    setup_tracing(app, settings, engine=get_engine())
 
     # Refuse to run with the placeholder JWT secret in a production-like env —
     # signing tokens with a public default would let anyone mint admin tokens.
@@ -196,11 +202,14 @@ def create_app() -> FastAPI:
         logger.warning("cors.unsafe_config", issues=cors_issues)
 
     # Order matters (last added = outermost). Resulting request flow:
-    #   SecurityHeaders → CORS → RequestId → CSRF → app
+    #   SecurityHeaders → CORS → RequestId → CSRF → Metrics → app
     # SecurityHeaders outermost so EVERY response (incl. CORS preflight, CSRF
     # rejections, errors) is stamped; CORS next so preflight carries CORS
     # headers; RequestId so a request_id is bound before CSRF can reject; CSRF
-    # innermost guards cookie-authenticated mutations just before the handler.
+    # guards cookie-authenticated mutations; Metrics innermost so the matched
+    # route template is resolved when recording request count + latency.
+    if settings.metrics_enabled:
+        app.add_middleware(MetricsMiddleware)
     app.add_middleware(CsrfMiddleware)
     app.add_middleware(RequestIdMiddleware)
     app.add_middleware(

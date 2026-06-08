@@ -269,6 +269,27 @@ In development, if Redis is unreachable it logs a warning and falls back to an
 in-process limiter so the demo still runs. Set `SENTINEL_RATE_LIMIT_ENABLED=false`
 to disable limiting entirely. Details: [docs/API.md](docs/API.md#rate-limiting).
 
+## Observability & operations
+
+- **Metrics** — Prometheus exposition at `GET /metrics` (no auth; restrict at the
+  network in prod). HTTP requests/latency by route/status/method, active
+  WebSocket connections, ingestion rows/jobs, detection runs/events/alerts,
+  response actions by status/type, drift score/status. Labels are
+  low-cardinality and carry no IDs/usernames/IPs.
+- **Tracing** — OpenTelemetry, **opt-in + no-op by default**. `pip install -e
+  ".[otel]"`, set `SENTINEL_OTEL_ENABLED=true` (+ `SENTINEL_OTEL_EXPORTER_OTLP_ENDPOINT`);
+  instruments FastAPI, SQLAlchemy, and outbound httpx.
+- **Logging** — structlog with a per-request `request_id` (echoed as
+  `X-Request-ID`) and the authenticated `user`/`role` bound on protected
+  requests. Secrets/tokens are never logged.
+- **Readiness** — `GET /readyz` returns structured per-dependency status
+  (database, redis, model) and `503` when a *required* dependency is down;
+  `GET /health` stays a lightweight liveness probe. The dashboard Topbar shows
+  Backend / Database / Redis / Model / Live pills.
+- **Backup/DR** — `make backup-db` and `make restore-db BACKUP=…`
+  (`pg_dump`/`psql`); volume-wipe risks and a DR checklist in
+  [docs/BACKUP_DR.md](docs/BACKUP_DR.md).
+
 ## Environment variables
 
 Copy `.env.example` at each level (`./`, `backend/`, `frontend/`) and adjust

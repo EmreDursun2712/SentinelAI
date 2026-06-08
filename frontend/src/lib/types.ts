@@ -422,8 +422,20 @@ export interface HealthResponse {
   version: string;
 }
 
+export interface DependencyCheck {
+  status: string; // ok | down | skipped | loaded | unavailable
+  required?: boolean;
+  backend?: string;
+  name?: string | null;
+  version?: string | null;
+}
+
 export interface ReadyzResponse {
   status: "ready" | "not_ready";
-  db: "ok" | "down";
   version: string;
+  checks: {
+    database: DependencyCheck;
+    redis: DependencyCheck;
+    model: DependencyCheck;
+  };
 }

@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.events import EventType, publish_event
 from app.core.logging import get_logger
+from app.core.metrics import INGESTION_JOBS, INGESTION_ROWS
 from app.ingestion.csv_loader import stream_csv
 from app.ingestion.parser import ParsedFlow
 from app.models import IngestionJob, NetworkEvent
@@ -101,6 +102,10 @@ async def ingest_csv(
         await session.commit()
         log.info("ingestion.completed", total=total, valid=valid, invalid=invalid)
 
+        INGESTION_JOBS.labels(status="completed").inc()
+        INGESTION_ROWS.labels(outcome="valid").inc(valid)
+        INGESTION_ROWS.labels(outcome="invalid").inc(invalid)
+
         await publish_event(
             EventType.INGESTION_JOB_COMPLETED,
             {
@@ -135,6 +140,7 @@ async def ingest_csv(
             )
         )
         await session.commit()
+        INGESTION_JOBS.labels(status="failed").inc()
         log.exception("ingestion.failed", error=message)
         raise
 
@@ -185,6 +191,8 @@ async def insert_flow_batch(
         )
     )
     await session.commit()
+    INGESTION_JOBS.labels(status="completed").inc()
+    INGESTION_ROWS.labels(outcome="valid").inc(len(events))
     logger.info("ingestion.batch_inserted", job_id=job_id, count=len(events))
     await publish_event(
         EventType.INGESTION_JOB_COMPLETED,
