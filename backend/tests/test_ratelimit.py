@@ -26,6 +26,7 @@ from app.core.ratelimit import (
 from app.core.security import create_access_token
 from app.models.enums import Role
 from app.services import user_service
+from app.services.user_service import LoginResult
 
 # ---------------------------------------------------------------------------
 # Policy parsing.
@@ -153,9 +154,10 @@ async def test_login_brute_force_trips_429(
     app.dependency_overrides[db_session] = _dummy_session
 
     async def fake_auth(session, *, username: str, password: str):
-        return None  # always "wrong password" so we isolate the rate limiter
+        # always "wrong password" so we isolate the rate limiter (no lockout DB writes)
+        return LoginResult(user=None, outcome="invalid_credentials")
 
-    monkeypatch.setattr(user_service, "authenticate", fake_auth)
+    monkeypatch.setattr(user_service, "authenticate_login", fake_auth)
 
     body = {"username": "victim", "password": "guess"}
     # Default login policy is 5/minute (per IP+username).
@@ -206,9 +208,9 @@ async def test_login_limit_is_per_username(
     app.dependency_overrides[db_session] = _dummy_session
 
     async def fake_auth(session, *, username: str, password: str):
-        return None
+        return LoginResult(user=None, outcome="invalid_credentials")
 
-    monkeypatch.setattr(user_service, "authenticate", fake_auth)
+    monkeypatch.setattr(user_service, "authenticate_login", fake_auth)
 
     for _ in range(5):
         await client.post("/api/v1/auth/login", json={"username": "alice", "password": "x"})

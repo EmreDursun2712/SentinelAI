@@ -10,9 +10,12 @@ never touches the database or the logs.
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    DateTime,
     Integer,
     String,
     text,
@@ -49,3 +52,13 @@ class User(TimestampMixin, Base):
     token_version: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, server_default=text("1")
     )
+
+    # Account-lockout bookkeeping (separate from rate limiting). Counts failures
+    # within a rolling window; ``locked_until`` in the future blocks sign-in.
+    failed_login_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    last_failed_login_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

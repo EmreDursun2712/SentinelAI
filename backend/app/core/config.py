@@ -41,8 +41,21 @@ class Settings(BaseSettings):
     auth_cookie_samesite: str = "lax"  # lax | strict | none  (none ⇒ must be secure)
     auth_cookie_domain: str | None = None
 
+    # Account lockout (separate from rate limiting). After N failed logins within
+    # the rolling window, the account is locked for the lockout duration.
+    login_max_failed_attempts: int = 5
+    login_failed_window_minutes: int = 15
+    login_lockout_minutes: int = 15
+
+    # HTTP security headers (CSP, nosniff, frame-deny, Referrer/Permissions
+    # policy). HSTS is added on top in production (or when forced) — only
+    # meaningful behind TLS, so it is off by default in dev.
+    security_headers_enabled: bool = True
+    security_hsts_enabled: bool = False
+
     # Bootstrap admin — created once on startup if both are set. If either is
     # missing, NO default user is created (no hardcoded credentials ever ship).
+    # The password must satisfy the password policy (see app.core.password_policy).
     bootstrap_admin_username: str | None = None
     bootstrap_admin_password: str | None = None
 
@@ -102,6 +115,11 @@ class Settings(BaseSettings):
     def jwt_secret_is_default(self) -> bool:
         """True if the JWT secret is still the shipped placeholder."""
         return self.jwt_secret == "dev-jwt-secret-change-me"
+
+    @property
+    def hsts_active(self) -> bool:
+        """Send HSTS in production, or when explicitly forced (TLS in front)."""
+        return self.is_production or self.security_hsts_enabled
 
     @property
     def response_allowed_cidrs_list(self) -> list[str]:

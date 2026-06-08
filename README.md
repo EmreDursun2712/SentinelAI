@@ -226,9 +226,27 @@ BACKEND_BOOTSTRAP_ADMIN_USERNAME=admin
 BACKEND_BOOTSTRAP_ADMIN_PASSWORD=<a-strong-password>
 ```
 
-Then open <http://localhost:5173>, sign in, and operate the dashboard. Additional
-users are created by an admin via `POST /api/v1/auth/users`. Full flow, cookie /
-SameSite / CSRF behavior, and curl examples: [docs/AUTH.md](docs/AUTH.md).
+Then open <http://localhost:5173>, sign in, and operate the dashboard. Admins get
+a **Users** page to create accounts (with live password-policy feedback). Full
+flow, cookie / SameSite / CSRF behavior, and curl examples: [docs/AUTH.md](docs/AUTH.md).
+
+## Security hardening
+
+Defense-in-depth beyond auth (details in [docs/DEPLOYMENT_SECURITY.md](docs/DEPLOYMENT_SECURITY.md)
+and [SECURITY.md](SECURITY.md)):
+
+- **HTTP security headers** on every response — CSP, `X-Content-Type-Options`,
+  `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and HSTS in
+  production.
+- **Password policy** (≥12 chars, ≥3 of 4 categories, no username) enforced for
+  bootstrap + admin-created users, mirrored client-side.
+- **Account lockout** — 5 failed logins in 15 min locks an account for 15 min
+  (`423` + `Retry-After`); separate from rate limiting; admin can unlock.
+- **CORS allow-listing** — no `*` with credentials; unsafe config fails closed in
+  production.
+- **Secure cookies + TLS** — secure-cookie/`SameSite` rules enforced at startup;
+  reverse-proxy (Nginx/Caddy) HTTPS examples in the deployment doc.
+- **Dependency scanning** — `pip-audit` / `npm audit` in CI + weekly Dependabot.
 
 ## Rate limiting
 

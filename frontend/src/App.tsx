@@ -2,6 +2,7 @@ import { Route, Routes } from "react-router-dom";
 
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { AppShell } from "@/components/layout/AppShell";
+import AdminUsersPage from "@/pages/AdminUsersPage";
 import AlertDetailPage from "@/pages/AlertDetailPage";
 import AlertsPage from "@/pages/AlertsPage";
 import DashboardPage from "@/pages/DashboardPage";
@@ -22,6 +23,7 @@ export default function App() {
           <Route path="response" element={<ResponseCenterPage />} />
           <Route path="reports" element={<ReportsPage />} />
           <Route path="ingestion" element={<IngestionPage />} />
+          <Route path="admin/users" element={<AdminUsersPage />} />
         </Route>
       </Route>
     </Routes>

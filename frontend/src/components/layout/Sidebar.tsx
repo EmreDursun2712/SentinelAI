@@ -9,6 +9,7 @@ import {
   ResponseIcon,
   ShieldIcon,
 } from "@/components/icons";
+import { useAuth } from "@/lib/auth/AuthContext";
 import { cn } from "@/lib/cn";
 
 interface NavItem {
@@ -26,7 +27,14 @@ const NAV: readonly NavItem[] = [
   { to: "/ingestion", label: "Ingestion", icon: IngestionIcon },
 ];
 
+// Shown only to admins.
+const ADMIN_NAV: readonly NavItem[] = [
+  { to: "/admin/users", label: "Users", icon: ShieldIcon },
+];
+
 export function Sidebar() {
+  const { hasRole } = useAuth();
+  const items = hasRole("ADMIN") ? [...NAV, ...ADMIN_NAV] : NAV;
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r border-slate-800 bg-slate-900/60">
       <div className="border-b border-slate-800 p-5">
@@ -44,7 +52,7 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 space-y-0.5 p-3">
-        {NAV.map((item) => (
+        {items.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}

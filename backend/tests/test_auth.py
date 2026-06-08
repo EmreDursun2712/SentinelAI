@@ -36,6 +36,7 @@ from app.core.security import (
 from app.models.enums import Role
 from app.services import session_service, user_service
 from app.services.session_service import IssuedSession, RotatedSession
+from app.services.user_service import LoginResult
 
 # ---------------------------------------------------------------------------
 # Password hashing (pure).
@@ -248,12 +249,12 @@ async def _login(
     the_user = user or _fake_user()
 
     async def fake_auth(session, *, username: str, password: str):
-        return the_user
+        return LoginResult(user=the_user, outcome="ok")
 
     async def fake_create(db, u, *, user_agent=None, ip=None):
         return IssuedSession(raw_token=refresh_token, session=SimpleNamespace(id=1))
 
-    monkeypatch.setattr(user_service, "authenticate", fake_auth)
+    monkeypatch.setattr(user_service, "authenticate_login", fake_auth)
     monkeypatch.setattr(session_service, "create_session", fake_create)
 
     resp = await client.post(
@@ -270,12 +271,12 @@ async def test_login_sets_cookies_and_returns_token(
 
     async def fake_auth(session, *, username: str, password: str):
         assert username == "alice" and password == "pw"
-        return _fake_user("alice", Role.ANALYST, token_version=3)
+        return LoginResult(user=_fake_user("alice", Role.ANALYST, token_version=3), outcome="ok")
 
     async def fake_create(db, user, *, user_agent=None, ip=None):
         return IssuedSession(raw_token="refresh-xyz", session=SimpleNamespace(id=1))
 
-    monkeypatch.setattr(user_service, "authenticate", fake_auth)
+    monkeypatch.setattr(user_service, "authenticate_login", fake_auth)
     monkeypatch.setattr(session_service, "create_session", fake_create)
 
     resp = await client.post("/api/v1/auth/login", json={"username": "alice", "password": "pw"})
@@ -299,13 +300,29 @@ async def test_login_failure_is_401(
     app.dependency_overrides[db_session] = _fake_db
 
     async def fake_auth(session, *, username: str, password: str):
-        return None
+        return LoginResult(user=None, outcome="invalid_credentials")
 
-    monkeypatch.setattr(user_service, "authenticate", fake_auth)
+    monkeypatch.setattr(user_service, "authenticate_login", fake_auth)
 
     resp = await client.post("/api/v1/auth/login", json={"username": "x", "password": "y"})
     assert resp.status_code == 401
     assert resp.json()["error"]["code"] == "unauthorized"
+
+
+async def test_login_locked_returns_423(
+    app: FastAPI, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app.dependency_overrides[db_session] = _fake_db
+
+    async def fake_auth(session, *, username: str, password: str):
+        return LoginResult(user=_fake_user(), outcome="locked", retry_after=900)
+
+    monkeypatch.setattr(user_service, "authenticate_login", fake_auth)
+
+    resp = await client.post("/api/v1/auth/login", json={"username": "alice", "password": "pw"})
+    assert resp.status_code == 423
+    assert resp.json()["error"]["code"] == "account_locked"
+    assert resp.headers["retry-after"] == "900"
 
 
 async def test_refresh_requires_csrf_token(

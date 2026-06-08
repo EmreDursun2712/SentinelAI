@@ -7,11 +7,17 @@ through the admin user-management endpoint — never on the hot path.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from typing import Literal
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import Settings, get_settings
 from app.core.errors import ConflictError
 from app.core.logging import get_logger
+from app.core.password_policy import validate_password
 from app.core.security import get_password_hash, verify_password
 from app.models import User
 from app.models.enums import Role
@@ -53,6 +59,8 @@ async def create_user(
     username = username.strip()
     if not username:
         raise ConflictError("Username must not be empty.")
+    # Enforce the password policy for every created account (admin + bootstrap).
+    validate_password(password, username=username)
     if await get_user_by_username(session, username) is not None:
         raise ConflictError(f"User '{username}' already exists.", details={"username": username})
 
@@ -72,23 +80,116 @@ async def create_user(
     return user
 
 
-async def authenticate(session: AsyncSession, *, username: str, password: str) -> User | None:
-    """Return the user if credentials are valid and the account is active.
+LoginOutcome = Literal["ok", "invalid_credentials", "inactive", "locked"]
 
-    Returns ``None`` for unknown user, wrong password, or deactivated account.
-    The branches are intentionally indistinguishable to the caller so the API
-    cannot be used to enumerate valid usernames.
+
+@dataclass
+class LoginResult:
+    """Result of a login attempt. ``retry_after`` is set only when ``locked``."""
+
+    user: User | None
+    outcome: LoginOutcome
+    retry_after: int | None = None
+
+
+def is_account_locked(user: User, now: datetime) -> bool:
+    return user.locked_until is not None and now < user.locked_until
+
+
+def seconds_until_unlock(user: User, now: datetime) -> int:
+    if user.locked_until is None:
+        return 0
+    return max(1, int((user.locked_until - now).total_seconds()))
+
+
+async def _record_failed_login(
+    session: AsyncSession, user: User, now: datetime, settings: Settings
+) -> bool:
+    """Increment the failure counter; lock the account if the threshold is hit.
+
+    The counter resets when the previous failure is older than the window, so it
+    measures "N failures within the window". Returns True if this call locked it.
     """
+    window = timedelta(minutes=settings.login_failed_window_minutes)
+    if user.last_failed_login_at is None or (now - user.last_failed_login_at) > window:
+        user.failed_login_count = 1
+    else:
+        user.failed_login_count += 1
+    user.last_failed_login_at = now
+
+    locked = False
+    if user.failed_login_count >= settings.login_max_failed_attempts:
+        user.locked_until = now + timedelta(minutes=settings.login_lockout_minutes)
+        locked = True
+        logger.warning(
+            "auth.account_locked",
+            username=user.username,
+            failed_count=user.failed_login_count,
+            locked_until=user.locked_until.isoformat(),
+        )
+    await session.commit()
+    return locked
+
+
+async def _record_successful_login(session: AsyncSession, user: User) -> None:
+    """Clear failure/lock state after a good login (only writes if needed)."""
+    if user.failed_login_count or user.last_failed_login_at or user.locked_until:
+        user.failed_login_count = 0
+        user.last_failed_login_at = None
+        user.locked_until = None
+        await session.commit()
+
+
+async def authenticate_login(
+    session: AsyncSession,
+    *,
+    username: str,
+    password: str,
+    settings: Settings | None = None,
+    now: datetime | None = None,
+) -> LoginResult:
+    """Validate credentials with brute-force lockout.
+
+    Order: unknown user (generic), inactive (generic), already-locked (423),
+    wrong password (records a failure — which may lock — generic), success
+    (clears counters). Unknown/wrong-password branches stay indistinguishable to
+    avoid username enumeration; only an *existing, already-locked* account
+    surfaces the lock so the legitimate owner gets a clear message.
+    """
+    settings = settings or get_settings()
+    now = now or datetime.now(UTC)
+
     user = await get_user_by_username(session, username.strip())
     if user is None:
-        # Hash a throwaway value so response timing doesn't leak whether the
-        # username exists (mitigates user enumeration via timing).
+        # Equalize timing so a missing username can't be detected by latency.
         verify_password(password, _DUMMY_HASH)
-        return None
+        return LoginResult(None, "invalid_credentials")
     if not user.is_active:
-        return None
+        return LoginResult(user, "inactive")
+    if is_account_locked(user, now):
+        return LoginResult(user, "locked", seconds_until_unlock(user, now))
     if not verify_password(password, user.password_hash):
+        await _record_failed_login(session, user, now, settings)
+        # Note: even if this attempt crossed the threshold, return a generic
+        # failure now; the *next* attempt sees the lock. This avoids leaking the
+        # exact attempt that locked the account.
+        return LoginResult(user, "invalid_credentials")
+
+    await _record_successful_login(session, user)
+    return LoginResult(user, "ok")
+
+
+async def unlock_user(session: AsyncSession, username: str) -> User | None:
+    """Admin reset: clear lockout + failure counters. ``None`` if no such user."""
+    user = await get_user_by_username(session, username.strip())
+    if user is None:
         return None
+    user.failed_login_count = 0
+    user.last_failed_login_at = None
+    user.locked_until = None
+    await session.commit()
+    await session.refresh(user)
+    logger.info("auth.account_unlocked", username=user.username)
     return user
 
 

@@ -13,6 +13,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import Settings
 from app.core.security import hash_refresh_token
 from app.models import AuthSession, User
 from app.models.enums import Role
@@ -20,10 +21,19 @@ from app.services import session_service, user_service
 
 pytestmark = pytest.mark.integration
 
+# Policy-compliant password reused across tests (no username substring).
+PASSWORD = "Str0ng-Pass-123"
+# Small, deterministic lockout thresholds for the lockout tests.
+LOCK_SETTINGS = Settings(
+    login_max_failed_attempts=3,
+    login_failed_window_minutes=15,
+    login_lockout_minutes=15,
+)
+
 
 async def _make_user(db: AsyncSession, username: str = "alice", role: Role = Role.ANALYST) -> User:
     return await user_service.create_user(
-        db, username=username, password="pw-12345", role=role, commit=False
+        db, username=username, password=PASSWORD, role=role, commit=False
     )
 
 
@@ -124,3 +134,59 @@ async def test_deactivate_user_locks_out_immediately(db_session: AsyncSession) -
     # All refresh sessions revoked → refresh is dead too.
     assert await session_service.active_session_count(db_session, user.id) == 0
     assert await session_service.rotate_session(db_session, issued.raw_token) is None
+
+
+# ---------------------------------------------------------------------------
+# Account lockout (authenticate_login against a real users row).
+# ---------------------------------------------------------------------------
+
+
+async def _attempt(db: AsyncSession, username: str, password: str):
+    return await user_service.authenticate_login(
+        db, username=username, password=password, settings=LOCK_SETTINGS
+    )
+
+
+async def test_repeated_failures_lock_then_admin_unlock(db_session: AsyncSession) -> None:
+    user = await _make_user(db_session, "lockme")
+
+    # 3 wrong attempts (the threshold) — each reports a generic failure …
+    for _ in range(LOCK_SETTINGS.login_max_failed_attempts):
+        result = await _attempt(db_session, "lockme", "wrong-password")
+        assert result.outcome == "invalid_credentials"
+
+    # … and the account is now locked: even the correct password is refused.
+    await db_session.refresh(user)
+    locked = await _attempt(db_session, "lockme", PASSWORD)
+    assert locked.outcome == "locked"
+    assert locked.retry_after and locked.retry_after > 0
+
+    # Admin unlock clears the lock + counters; correct password works again.
+    await user_service.unlock_user(db_session, "lockme")
+    ok = await _attempt(db_session, "lockme", PASSWORD)
+    assert ok.outcome == "ok"
+
+
+async def test_successful_login_resets_failure_counter(db_session: AsyncSession) -> None:
+    user = await _make_user(db_session, "resetme")
+    await _attempt(db_session, "resetme", "nope")
+    await _attempt(db_session, "resetme", "nope")
+    await db_session.refresh(user)
+    assert user.failed_login_count == 2
+
+    ok = await _attempt(db_session, "resetme", PASSWORD)
+    assert ok.outcome == "ok"
+    await db_session.refresh(user)
+    assert user.failed_login_count == 0
+    assert user.locked_until is None
+
+
+async def test_inactive_and_unknown_login_outcomes(db_session: AsyncSession) -> None:
+    await _make_user(db_session, "gone")
+    await user_service.deactivate_user(db_session, "gone")
+    inactive = await _attempt(db_session, "gone", PASSWORD)
+    assert inactive.outcome == "inactive"
+
+    unknown = await _attempt(db_session, "nobody", PASSWORD)
+    assert unknown.outcome == "invalid_credentials"
+    assert unknown.user is None

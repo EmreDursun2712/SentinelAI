@@ -79,6 +79,33 @@ class RateLimitedError(AppError):
         )
 
 
+class WeakPasswordError(BadRequestError):
+    """A password that fails the policy. ``details.issues`` lists the reasons."""
+
+    code = "weak_password"
+
+    def __init__(self, issues: list[str]) -> None:
+        super().__init__(
+            "Password does not meet the security policy.",
+            details={"issues": issues},
+        )
+
+
+class AccountLockedError(AppError):
+    """Account temporarily locked after repeated failed logins."""
+
+    code = "account_locked"
+    status_code = status.HTTP_423_LOCKED
+
+    def __init__(self, retry_after: int) -> None:
+        super().__init__(
+            "Account temporarily locked due to repeated failed sign-in attempts. "
+            "Try again later or contact an administrator.",
+            details={"retry_after": retry_after},
+            headers={"Retry-After": str(max(0, int(retry_after)))},
+        )
+
+
 def _request_id(request: Request) -> str | None:
     return getattr(request.state, "request_id", None)
 

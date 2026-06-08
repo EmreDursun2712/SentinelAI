@@ -31,8 +31,9 @@ bumped to invalidate **every** outstanding access token for a user at once
 | POST | `/api/v1/auth/logout` | refresh cookie | Revoke the current session, clear cookies. |
 | POST | `/api/v1/auth/logout-all` | access token | Revoke all sessions + bump `token_version` (all devices). |
 | GET | `/api/v1/auth/me` | access token | Current identity (enforces `is_active`). |
-| POST | `/api/v1/auth/users` | ADMIN | Create a user `{username, password, role}`. |
+| POST | `/api/v1/auth/users` | ADMIN | Create a user `{username, password, role}` (password policy enforced). |
 | POST | `/api/v1/auth/users/{username}/deactivate` | ADMIN | Deactivate: lock login, revoke sessions, invalidate tokens. |
+| POST | `/api/v1/auth/users/{username}/unlock` | ADMIN | Clear a brute-force lockout (reset counter). |
 
 ### Refresh-token rotation
 
@@ -102,6 +103,33 @@ SENTINEL_BOOTSTRAP_ADMIN_USERNAME=admin
 SENTINEL_BOOTSTRAP_ADMIN_PASSWORD=<a-strong-password>
 ```
 
+The bootstrap password must satisfy the password policy below, or no admin is
+created (the failure is logged).
+
+## Password policy
+
+Enforced server-side for the bootstrap admin and every admin-created user
+(`app.core.password_policy`), and mirrored client-side for live feedback
+(`frontend/src/lib/auth/passwordPolicy.ts`, shown on the admin **Users** page):
+
+- at least **12** characters,
+- at least **3 of 4** categories: lowercase, uppercase, number, symbol,
+- must **not contain the username** (case-insensitive).
+
+Violations return `400 weak_password` with a `details.issues` list.
+
+## Account lockout (brute-force)
+
+Separate from rate limiting (which throttles a *source*): lockout protects a
+*targeted account*. After `SENTINEL_LOGIN_MAX_FAILED_ATTEMPTS` (default 5)
+failures within `SENTINEL_LOGIN_FAILED_WINDOW_MINUTES` (default 15), the account
+locks for `SENTINEL_LOGIN_LOCKOUT_MINUTES` (default 15). While locked, login
+returns `423 account_locked` with `Retry-After`. A successful login resets the
+counter; an admin can clear it early via the unlock endpoint. Events are logged
+(`auth.account_locked` / `auth.account_unlocked`). The attempt that crosses the
+threshold returns the generic 401 (the lock surfaces on the *next* attempt), and
+unknown usernames are never tracked — no enumeration via lockout.
+
 ## Configuration
 
 | Env | Default | Notes |
@@ -113,7 +141,15 @@ SENTINEL_BOOTSTRAP_ADMIN_PASSWORD=<a-strong-password>
 | `SENTINEL_AUTH_COOKIE_SECURE` | `true` | **Set `false` for http://localhost dev.** |
 | `SENTINEL_AUTH_COOKIE_SAMESITE` | `lax` | `lax`/`strict`/`none` (`none` ⇒ must be secure). |
 | `SENTINEL_AUTH_COOKIE_DOMAIN` | _(host-only)_ | Set for a shared parent domain if needed. |
+| `SENTINEL_LOGIN_MAX_FAILED_ATTEMPTS` | `5` | Failures before lockout. |
+| `SENTINEL_LOGIN_FAILED_WINDOW_MINUTES` | `15` | Rolling window for counting failures. |
+| `SENTINEL_LOGIN_LOCKOUT_MINUTES` | `15` | Lockout duration. |
+| `SENTINEL_SECURITY_HEADERS_ENABLED` | `true` | Toggle the security-headers middleware. |
+| `SENTINEL_SECURITY_HSTS_ENABLED` | `false` | Force HSTS (auto-on in production). |
 | `SENTINEL_API_KEY` | `dev-api-key-change-me` | Service-to-service guard (non-interactive callers). |
+
+See [DEPLOYMENT_SECURITY.md](DEPLOYMENT_SECURITY.md) for TLS, the full security
+header set, and the CORS / secure-cookie production rules.
 
 ## Frontend
 

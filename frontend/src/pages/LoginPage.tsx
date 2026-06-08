@@ -37,6 +37,8 @@ export default function LoginPage() {
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         setError("Invalid username or password.");
+      } else if (err instanceof ApiError && err.status === 423) {
+        setError("Account temporarily locked after repeated failures. Try again later.");
       } else if (err instanceof ApiError && err.status === 429) {
         setError("Too many attempts. Please wait and try again.");
       } else {

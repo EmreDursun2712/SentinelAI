@@ -13,7 +13,8 @@ cd "${REPO_ROOT}"
 
 BASE="${SENTINELAI_BASE_URL:-http://localhost:8000}"
 export BACKEND_BOOTSTRAP_ADMIN_USERNAME="${BACKEND_BOOTSTRAP_ADMIN_USERNAME:-admin}"
-export BACKEND_BOOTSTRAP_ADMIN_PASSWORD="${BACKEND_BOOTSTRAP_ADMIN_PASSWORD:-e2e-admin-pw}"
+# Must satisfy the password policy (12+ chars, 3+ categories, no username substring).
+export BACKEND_BOOTSTRAP_ADMIN_PASSWORD="${BACKEND_BOOTSTRAP_ADMIN_PASSWORD:-E2e-Secret-2026!}"
 
 step() { printf "\n==> %s\n" "$1"; }
 

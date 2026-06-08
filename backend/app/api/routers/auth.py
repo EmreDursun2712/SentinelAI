@@ -40,7 +40,7 @@ from app.core.cookies import (
     set_csrf_cookie,
     set_refresh_cookie,
 )
-from app.core.errors import NotFoundError, UnauthorizedError
+from app.core.errors import AccountLockedError, NotFoundError, UnauthorizedError
 from app.core.logging import get_logger
 from app.core.security import create_access_token
 from app.models import User
@@ -92,15 +92,20 @@ async def login(
     request: LoginRequest,
 ) -> TokenResponse:
     # Brute-force guard: limit by IP + username together, before touching the DB.
+    # This is separate from per-account lockout below (rate limit throttles a
+    # source; lockout protects a targeted account).
     identity = f"{client_ip(http_request)}:{request.username.strip().lower()}"
     await enforce_rate_limit(http_request, "login", identity)
 
-    user = await user_service.authenticate(
+    result = await user_service.authenticate_login(
         session, username=request.username, password=request.password
     )
-    if user is None:
+    if result.outcome == "locked":
+        raise AccountLockedError(result.retry_after or 0)
+    if result.outcome != "ok" or result.user is None:
         # Single generic message — never reveal which half of the pair was wrong.
         raise UnauthorizedError("Invalid username or password.")
+    user = result.user
 
     issued = await session_service.create_session(
         session,
@@ -247,4 +252,22 @@ async def deactivate_user(
     if user is None:
         raise NotFoundError(f"User '{username}' not found.")
     logger.info("auth.user_deactivated_by_admin", target=username, by=admin.username)
+    return UserOut.model_validate(user)
+
+
+@router.post(
+    "/users/{username}/unlock",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(require_admin)],
+)
+async def unlock_user(
+    session: SessionDep,
+    username: str,
+    admin: ActiveUser,
+) -> UserOut:
+    """Admin reset of a locked-out account: clears the failure counter + lock."""
+    user = await user_service.unlock_user(session, username)
+    if user is None:
+        raise NotFoundError(f"User '{username}' not found.")
+    logger.info("auth.user_unlocked_by_admin", target=username, by=admin.username)
     return UserOut.model_validate(user)

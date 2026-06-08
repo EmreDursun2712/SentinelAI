@@ -1,5 +1,13 @@
-import type { AuthUser, LoginResponse } from "@/lib/types";
+import type { AuthUser, Role } from "@/lib/types";
+import type { LoginResponse } from "@/lib/types";
 import { request } from "./client";
+
+export interface CreatedUser {
+  id: number;
+  username: string;
+  role: Role;
+  is_active: boolean;
+}
 
 /** Exchange credentials for an access token; the server also sets the refresh
  *  + CSRF cookies. */
@@ -30,4 +38,16 @@ export function logout(): Promise<{ detail: string }> {
 /** Revoke every session for the user (sign out of all devices). */
 export function logoutAll(): Promise<{ detail: string }> {
   return request<{ detail: string }>("/auth/logout-all", { method: "POST" });
+}
+
+/** Create a user (ADMIN only). The backend enforces the password policy. */
+export function createUser(
+  username: string,
+  password: string,
+  role: Role,
+): Promise<CreatedUser> {
+  return request<CreatedUser>("/auth/users", {
+    method: "POST",
+    body: { username, password, role },
+  });
 }

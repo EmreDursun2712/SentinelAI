@@ -22,6 +22,8 @@ class UserOut(BaseModel):
     role: Role
     is_active: bool
     token_version: int
+    failed_login_count: int
+    locked_until: datetime | None
     created_at: datetime
     updated_at: datetime
 

@@ -36,6 +36,7 @@ from app.core.ratelimit import (
     get_rate_limiter,
     set_rate_limiter,
 )
+from app.core.security_headers import SecurityHeadersMiddleware, validate_cors_origins
 from app.core.ws_manager import get_connection_manager
 from app.services.model_registry import get_model_registry
 from app.services.user_service import ensure_bootstrap_admin
@@ -58,6 +59,14 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
             "SENTINEL_JWT_SECRET is still the shipped default. Set a strong "
             "secret before running in a production-like environment."
         )
+
+    # Cookies must be Secure in production; SameSite=None requires Secure anywhere.
+    if settings.is_production and not settings.auth_cookie_secure:
+        raise RuntimeError(
+            "SENTINEL_AUTH_COOKIE_SECURE must be true in a production-like environment."
+        )
+    if settings.auth_cookie_samesite.strip().lower() == "none" and not settings.auth_cookie_secure:
+        raise RuntimeError("SameSite=None auth cookies require SENTINEL_AUTH_COOKIE_SECURE=true.")
 
     await _configure_rate_limiter(settings)
 
@@ -177,11 +186,21 @@ def create_app() -> FastAPI:
         redoc_url="/redoc",
     )
 
+    # Fail closed on unsafe CORS (e.g. "*" with credentials): fatal in prod,
+    # a loud warning in dev.
+    cors_issues = validate_cors_origins(settings.cors_origins_list, allow_credentials=True)
+    if cors_issues:
+        message = "Unsafe CORS configuration: " + "; ".join(cors_issues)
+        if settings.is_production:
+            raise RuntimeError(message)
+        logger.warning("cors.unsafe_config", issues=cors_issues)
+
     # Order matters (last added = outermost). Resulting request flow:
-    #   CORS → RequestId → CSRF → app
-    # CORS outermost so preflight responses carry CORS headers; RequestId next so
-    # a request_id is bound before CSRF can reject; CSRF innermost guards
-    # cookie-authenticated mutations just before the handler.
+    #   SecurityHeaders → CORS → RequestId → CSRF → app
+    # SecurityHeaders outermost so EVERY response (incl. CORS preflight, CSRF
+    # rejections, errors) is stamped; CORS next so preflight carries CORS
+    # headers; RequestId so a request_id is bound before CSRF can reject; CSRF
+    # innermost guards cookie-authenticated mutations just before the handler.
     app.add_middleware(CsrfMiddleware)
     app.add_middleware(RequestIdMiddleware)
     app.add_middleware(
@@ -192,6 +211,8 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
         expose_headers=["x-request-id"],
     )
+    if settings.security_headers_enabled:
+        app.add_middleware(SecurityHeadersMiddleware, hsts=settings.hsts_active)
 
     register_error_handlers(app)
 
