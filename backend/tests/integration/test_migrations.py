@@ -38,6 +38,7 @@ EXPECTED_TABLES = {
     "alert_artifacts",
     "incident_reports",
     "model_drift_snapshots",
+    "tasks",
 }
 
 # compare_metadata ops that signal real schema drift we always want to fail on.

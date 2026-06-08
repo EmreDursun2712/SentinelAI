@@ -16,8 +16,9 @@ import * as ingestionApi from "./ingestion";
 import * as investigationApi from "./investigation";
 import * as reportsApi from "./reports";
 import * as responseApi from "./response";
+import * as tasksApi from "./tasks";
 
-export { alertsApi, authApi, dashboardApi, detectionApi, healthApi, ingestionApi, investigationApi, reportsApi, responseApi };
+export { alertsApi, authApi, dashboardApi, detectionApi, healthApi, ingestionApi, investigationApi, reportsApi, responseApi, tasksApi };
 
 // Convenience re-exports.
 export { health, readyz } from "./health";

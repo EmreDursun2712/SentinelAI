@@ -23,6 +23,7 @@ from app.api.routers import (
     reports,
     response,
     stream,
+    tasks,
 )
 from app.core.broadcast import (
     LocalBroadcaster,
@@ -37,6 +38,13 @@ from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging, get_logger
 from app.core.metrics import MetricsMiddleware
 from app.core.middleware import RequestIdMiddleware
+from app.core.queue import (
+    ArqTaskQueue,
+    NullTaskQueue,
+    arq_redis_settings,
+    get_task_queue,
+    set_task_queue,
+)
 from app.core.ratelimit import (
     InMemoryRateLimiter,
     NoopRateLimiter,
@@ -83,6 +91,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     await _configure_rate_limiter(settings)
     await _configure_broadcaster(settings)
+    await _configure_task_queue(settings)
 
     # Register the agent runtime on the in-process event bus (idempotent,
     # state-guarded handlers; see app.agents.runtime).
@@ -135,6 +144,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         with contextlib.suppress(asyncio.CancelledError):
             await heartbeat
         await get_broadcaster().aclose()
+        await get_task_queue().aclose()
         await get_rate_limiter().aclose()
         await dispose_engine()
         logger.info("backend.shutdown")
@@ -228,6 +238,32 @@ async def _configure_broadcaster(settings) -> None:
     logger.info("broadcast.backend", backend="redis", channel="sentinelai:events")
 
 
+async def _configure_task_queue(settings) -> None:
+    """Connect the API to the arq task queue (Redis). Without Redis, enqueue is a
+    no-op (tasks stay PENDING) so dev without a worker still serves sync endpoints.
+    """
+    if not settings.redis_url:
+        set_task_queue(NullTaskQueue())
+        logger.warning("queue.no_redis_url", backend="null", env=settings.env)
+        return
+    try:
+        from arq import create_pool
+
+        pool = await create_pool(arq_redis_settings(settings.redis_url))
+    except Exception as exc:
+        if settings.is_production:
+            raise RuntimeError(
+                f"Redis is required for the task queue in production but is "
+                f"unreachable at {settings.redis_url}: {exc}"
+            ) from exc
+        set_task_queue(NullTaskQueue())
+        logger.warning("queue.redis_unavailable_dev_fallback", backend="null", error=str(exc))
+        return
+
+    set_task_queue(ArqTaskQueue(pool, settings.task_queue_name))
+    logger.info("queue.backend", backend="arq", queue=settings.task_queue_name)
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
 
@@ -303,6 +339,7 @@ def create_app() -> FastAPI:
     app.include_router(
         dashboard.router, prefix=API_V1_PREFIX, tags=["dashboard"], dependencies=protected
     )
+    app.include_router(tasks.router, prefix=API_V1_PREFIX, tags=["tasks"], dependencies=protected)
     # NOTE: the WebSocket /stream is an echo stub today and is secured in the
     # WebSocket-broadcasting etap (token via query param). It carries no data.
     app.include_router(stream.router, prefix=API_V1_PREFIX, tags=["stream"])

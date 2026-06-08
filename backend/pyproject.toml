@@ -36,6 +36,9 @@ dependencies = [
     "joblib>=1.4",
     "redis>=5.0",
     "prometheus-client>=0.20",
+    # Async (asyncio-native) Redis task queue — fits the async backend; the
+    # worker calls the same async services directly. See docs/TASK_QUEUE.md.
+    "arq>=0.26",
 ]
 
 [project.optional-dependencies]

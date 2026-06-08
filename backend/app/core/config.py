@@ -82,6 +82,7 @@ class Settings(BaseSettings):
     rate_limit_detection: str = "5/minute"  # per user
     rate_limit_report: str = "20/minute"  # per user
     rate_limit_response: str = "60/minute"  # per user
+    rate_limit_tasks: str = "30/minute"  # per user — guards background-job spam
 
     # Ingestion
     ingest_data_dir: str = "data"
@@ -103,6 +104,13 @@ class Settings(BaseSettings):
     # alert). Investigation + Reporting stay analyst-triggered unless enabled.
     investigation_auto: bool = False
     reporting_auto: bool = False
+
+    # Async task queue (arq, Redis-backed). The worker calls the same services.
+    # When no Redis is configured, enqueue is a no-op (tasks stay PENDING) — dev
+    # without a worker still serves the synchronous endpoints. See TASK_QUEUE.md.
+    task_queue_name: str = "sentinelai:queue"
+    retention_days: int = 90  # default age cutoff for the retention-cleanup task
+    ml_retrain_enabled: bool = False  # gate the (heavy) ML retrain task endpoint
 
     # Reporting
     reports_dir: str = "data/reports"

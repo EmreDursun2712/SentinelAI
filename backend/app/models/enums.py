@@ -133,6 +133,31 @@ class IncidentKind(str, enum.Enum):
     DAILY_SUMMARY = "DAILY_SUMMARY"
 
 
+class TaskKind(str, enum.Enum):
+    """Kind of background job tracked in the ``tasks`` table."""
+
+    DETECTION_RUN = "DETECTION_RUN"
+    REPORT_ALERT = "REPORT_ALERT"
+    DAILY_SUMMARY = "DAILY_SUMMARY"
+    DRIFT_RUN = "DRIFT_RUN"
+    RETENTION_CLEANUP = "RETENTION_CLEANUP"
+    ML_RETRAIN = "ML_RETRAIN"
+
+
+class TaskStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+# Terminal states — a task in one of these will not change further.
+TASK_TERMINAL_STATES: Final[frozenset[TaskStatus]] = frozenset(
+    {TaskStatus.SUCCEEDED, TaskStatus.FAILED, TaskStatus.CANCELLED}
+)
+
+
 class DriftStatus(str, enum.Enum):
     """Drift severity bucket derived from the overall drift score."""
 

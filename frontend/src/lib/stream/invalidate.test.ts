@@ -45,6 +45,10 @@ describe("streamInvalidationKeys", () => {
       ["detection"],
     ]);
   });
+
+  test("task events refresh only the tasks views (no dashboard)", () => {
+    expect(streamInvalidationKeys("task.updated")).toEqual([["tasks"]]);
+  });
 });
 
 describe("applyStreamInvalidation", () => {

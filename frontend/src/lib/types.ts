@@ -415,6 +415,37 @@ export interface GenericReportOut {
   packet: Record<string, unknown> & { markdown?: string };
 }
 
+// ----- Tasks (background jobs) --------------------------------------------
+
+export type TaskKind =
+  | "DETECTION_RUN"
+  | "REPORT_ALERT"
+  | "DAILY_SUMMARY"
+  | "DRIFT_RUN"
+  | "RETENTION_CLEANUP"
+  | "ML_RETRAIN";
+
+export type TaskStatus = "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED";
+
+export interface Task {
+  id: string;
+  kind: TaskKind;
+  status: TaskStatus;
+  progress: number;
+  params: Record<string, unknown>;
+  result: Record<string, unknown> | null;
+  error: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface TaskList {
+  items: Task[];
+}
+
 // ----- Health -------------------------------------------------------------
 
 export interface HealthResponse {

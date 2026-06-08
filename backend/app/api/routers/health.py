@@ -19,6 +19,7 @@ from app import __version__
 from app.core.config import get_settings
 from app.core.db import ping_db
 from app.core.metrics import render_latest
+from app.core.queue import get_task_queue
 from app.core.ratelimit import get_rate_limiter
 from app.services.model_registry import get_model_registry
 
@@ -47,6 +48,17 @@ async def _check_redis() -> dict[str, Any]:
     return {"status": "ok" if reachable else "down", "backend": backend, "required": required}
 
 
+async def _check_queue() -> dict[str, Any]:
+    """Task-queue (Redis) reachability. Informational — the API works without a
+    worker (jobs just wait); only 'down' when a real queue can't be reached."""
+    queue = get_task_queue()
+    backend = getattr(queue, "backend", "unknown")
+    if backend == "null":
+        return {"status": "skipped", "backend": backend, "required": False}
+    reachable = await queue.ping()
+    return {"status": "ok" if reachable else "down", "backend": backend, "required": False}
+
+
 def _check_model() -> dict[str, Any]:
     """Model availability is informational — the app runs without one."""
     bundle = get_model_registry().get()
@@ -65,6 +77,7 @@ async def readyz(response: Response) -> dict[str, Any]:
     checks: dict[str, Any] = {
         "database": await _check_database(),
         "redis": await _check_redis(),
+        "queue": await _check_queue(),
         "model": _check_model(),
     }
     ready = all(c.get("status") == "ok" for c in checks.values() if c.get("required"))

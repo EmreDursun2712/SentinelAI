@@ -87,6 +87,38 @@ services:
       retries: 5
       start_period: 30s
 
+  # arq task worker — same image/code as the backend, run with a different
+  # entrypoint. Processes the Redis queue (detection batches, reports, drift,
+  # retention, optional retrain). See docs/TASK_QUEUE.md.
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sentinelai-worker
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy # backend applies DB migrations before the worker runs
+    environment:
+      SENTINEL_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-sentinelai}:${POSTGRES_PASSWORD:-sentinelai}@postgres:5432/${POSTGRES_DB:-sentinelai}
+      SENTINEL_REDIS_URL: ${BACKEND_REDIS_URL:-redis://redis:6379/0}
+      SENTINEL_LOG_LEVEL: ${BACKEND_LOG_LEVEL:-info}
+      SENTINEL_RETENTION_DAYS: ${BACKEND_RETENTION_DAYS:-90}
+      SENTINEL_ML_RETRAIN_ENABLED: ${BACKEND_ML_RETRAIN_ENABLED:-false}
+    volumes:
+      - ./backend:/app
+      - ./ml/artifacts:/app/ml_artifacts:ro
+    # Override the backend's uvicorn entrypoint to run the arq worker instead.
+    entrypoint: ["arq", "app.worker.WorkerSettings"]
+    healthcheck:
+      test: ["CMD-SHELL", "arq --check app.worker.WorkerSettings || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
   frontend:
     build:
       context: ./frontend

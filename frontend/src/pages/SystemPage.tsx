@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { RefreshIcon } from "@/components/icons";
+import { TasksPanel } from "@/components/tasks/TasksPanel";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -121,6 +122,10 @@ export default function SystemPage() {
                 model?.name ? `${model.name} @ ${model.version ?? "?"}` : "no model staged"
               }
             />
+          </div>
+
+          <div className="mt-4">
+            <TasksPanel />
           </div>
 
           <Card className="mt-4" padding="md">

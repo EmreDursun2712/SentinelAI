@@ -24,6 +24,8 @@ from app.models.enums import (
     Role,
     RollbackStatus,
     Severity,
+    TaskKind,
+    TaskStatus,
 )
 from app.models.incident_report import IncidentReport
 from app.models.ingestion_job import IngestionJob
@@ -32,6 +34,7 @@ from app.models.model_drift import ModelDriftSnapshot
 from app.models.model_version import ModelVersion
 from app.models.network_event import NetworkEvent
 from app.models.response_action import ResponseAction
+from app.models.task import Task
 from app.models.user import User
 
 __all__ = [
@@ -60,6 +63,9 @@ __all__ = [
     "Role",
     "RollbackStatus",
     "Severity",
+    "Task",
+    "TaskKind",
+    "TaskStatus",
     "TimestampMixin",
     "User",
 ]

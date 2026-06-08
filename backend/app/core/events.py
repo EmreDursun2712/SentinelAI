@@ -54,6 +54,7 @@ class EventType:
     INGESTION_JOB_COMPLETED = "ingestion.job_completed"
     DETECTION_RUN_COMPLETED = "detection.run_completed"
     REPORT_CREATED = "report.created"
+    TASK_UPDATED = "task.updated"
 
 
 # Lightweight payload "schema": the expected (non-sensitive) keys per event.
@@ -73,6 +74,7 @@ EVENT_PAYLOAD_KEYS: dict[str, list[str]] = {
     EventType.INGESTION_JOB_COMPLETED: ["job_id", "kind", "total_rows", "valid_rows"],
     EventType.DETECTION_RUN_COMPLETED: ["processed", "alerts_created"],
     EventType.REPORT_CREATED: ["report_id", "kind"],
+    EventType.TASK_UPDATED: ["task_id", "kind", "status", "progress"],
 }
 
 

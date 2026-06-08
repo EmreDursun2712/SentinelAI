@@ -290,6 +290,18 @@ to disable limiting entirely. Details: [docs/API.md](docs/API.md#rate-limiting).
   (`pg_dump`/`psql`); volume-wipe risks and a DR checklist in
   [docs/BACKUP_DR.md](docs/BACKUP_DR.md).
 
+## Async task queue
+
+Long jobs (large detection batches, report generation, daily summary, drift
+checks, retention cleanup, optional retrain) run on a **Redis-backed
+[arq](https://arq-docs.helpmanual.io/) worker** instead of blocking the request
+thread. POST to `/api/v1/tasks/*` → get a **task id** back immediately; track it
+via `GET /api/v1/tasks/{id}` / `GET /api/v1/tasks` and live `task.updated`
+WebSocket events. Status lives in the `tasks` table (`PENDING → RUNNING →
+SUCCEEDED | FAILED | CANCELLED`, with progress + result). The dashboard **System**
+page has a Background-tasks panel. The `worker` Docker Compose service runs it
+(`arq app.worker.WorkerSettings`). Full detail: [docs/TASK_QUEUE.md](docs/TASK_QUEUE.md).
+
 ## Environment variables
 
 Copy `.env.example` at each level (`./`, `backend/`, `frontend/`) and adjust

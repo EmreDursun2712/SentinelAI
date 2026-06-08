@@ -11,7 +11,10 @@ export function streamInvalidationKeys(type: string): string[][] {
   // Connection/heartbeat frames carry no data — nothing to refetch.
   if (!type || type.startsWith("stream.")) return [];
 
-  // Almost everything affects the dashboard aggregates.
+  // Task lifecycle updates only affect the tasks views (no dashboard impact).
+  if (type.startsWith("task.")) return [["tasks"]];
+
+  // Almost everything else affects the dashboard aggregates.
   const keys: string[][] = [["dashboard"]];
 
   if (type.startsWith("alert.")) {

@@ -93,6 +93,7 @@ def get_policies() -> dict[str, Policy]:
         "detection": parse_rate(s.rate_limit_detection),
         "report": parse_rate(s.rate_limit_report),
         "response": parse_rate(s.rate_limit_response),
+        "tasks": parse_rate(s.rate_limit_tasks),
     }
 
 

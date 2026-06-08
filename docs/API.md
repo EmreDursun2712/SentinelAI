@@ -106,6 +106,7 @@ server-side with the request id and the user/IP.
 | `detection`     | `/detection/run`, `/detection/batch`, `/detection/events/{id}`, `/detection/predict` | 5 / minute | user |
 | `report`        | `/alerts/{id}/report`, `/reports/daily/run`                    | 20 / minute   | user          |
 | `response`      | `/response/recommend/{id}`, `/response/{id}/approve`, `/response/{id}/reject` | 60 / minute | user |
+| `tasks`         | `POST /tasks/*` (background-job creation)                       | 30 / minute   | user          |
 
 Expensive endpoints consume both their specific bucket and the general
 `authenticated` bucket. Override any policy with the matching env var, e.g.
@@ -154,10 +155,18 @@ Every non-2xx response has this shape:
   "checks": {
     "database": { "status": "ok", "required": true },
     "redis": { "status": "ok", "backend": "redis", "required": true },
+    "queue": { "status": "ok", "backend": "arq", "required": false },
     "model": { "status": "loaded", "required": false, "name": "rf", "version": "v1" }
   }
 }
 ```
+
+## Background tasks
+
+Long operations run on the arq worker. `POST /api/v1/tasks/*` enqueues a job and
+returns a `Task` (id + status); `GET /api/v1/tasks` / `GET /api/v1/tasks/{id}`
+report status (owner-scoped; ADMIN sees all), and `task.updated` events stream
+live. Full surface, kinds, and config: [TASK_QUEUE.md](TASK_QUEUE.md).
 
 ## Endpoints (Phase 0 scaffolding — full behavior lands in later phases)
 
@@ -250,6 +259,7 @@ artifacts. Frames have the shape `{ "type", "payload", "ts" }`.
 | `ingestion.job_completed`     | `job_id, total_rows, valid_rows, invalid_rows`   |
 | `detection.run_completed`     | `processed, alerts_created`                       |
 | `report.created`              | `report_id, kind` (+ `alert_id` or `date`)       |
+| `task.updated`                | `task_id, kind, status, progress`                 |
 | `stream.connected`            | `user, role`                                      |
 | `stream.heartbeat`            | _(empty)_                                         |
 
