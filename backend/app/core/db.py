@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
@@ -49,6 +50,19 @@ def get_engine() -> AsyncEngine:
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:
+    if _session_factory is None:
+        raise RuntimeError("Session factory not initialized.")
+    async with _session_factory() as session:
+        yield session
+
+
+@asynccontextmanager
+async def session_scope() -> AsyncIterator[AsyncSession]:
+    """A standalone session for work outside a request (e.g. agent handlers).
+
+    Background handlers run post-commit on the event bus, with no FastAPI
+    dependency to inject a session — they open their own here.
+    """
     if _session_factory is None:
         raise RuntimeError("Session factory not initialized.")
     async with _session_factory() as session:

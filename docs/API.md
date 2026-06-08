@@ -258,6 +258,9 @@ The frontend maps each event to the TanStack Query keys it should invalidate
 immediately. When the stream is connected, polling intervals are stretched 5× as
 a fallback; if the socket drops, normal polling resumes.
 
-> **Single-process note:** the event bus is in-process. With one backend worker
-> this is complete; horizontal scaling would need a shared broker (e.g. Redis
-> pub/sub) to fan events across replicas.
+> **Multi-worker fan-out:** WebSocket delivery is **Redis pub/sub-backed**, so a
+> client connected to any worker receives events published by any other worker.
+> Each backend process publishes domain events to the `sentinelai:events` channel
+> and subscribes to it, broadcasting to its own local sockets. With Redis
+> configured (required in production) this scales across replicas; in dev without
+> Redis it falls back to a single-process local broadcast.

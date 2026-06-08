@@ -110,6 +110,7 @@ async def ingest_csv(
             EventType.INGESTION_JOB_COMPLETED,
             {
                 "job_id": job_id,
+                "kind": kind.value,
                 "total_rows": total,
                 "valid_rows": valid,
                 "invalid_rows": invalid,
@@ -196,7 +197,13 @@ async def insert_flow_batch(
     logger.info("ingestion.batch_inserted", job_id=job_id, count=len(events))
     await publish_event(
         EventType.INGESTION_JOB_COMPLETED,
-        {"job_id": job_id, "total_rows": len(flows), "valid_rows": len(flows), "invalid_rows": 0},
+        {
+            "job_id": job_id,
+            "kind": kind.value,
+            "total_rows": len(flows),
+            "valid_rows": len(flows),
+            "invalid_rows": 0,
+        },
     )
     return len(events)
 

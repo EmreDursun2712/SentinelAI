@@ -9,10 +9,14 @@ safely configured (allowlisted CIDRs, analyst approval). See
 
 from __future__ import annotations
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.base import Agent
+from app.core.db import session_scope
+from app.core.events import Event, EventType
 from app.models import Alert, ResponseAction
+from app.models.enums import AlertStatus
 from app.services.response_service import (
     approve_action,
     recommend_for_alert,
@@ -27,9 +31,36 @@ class ResponseAgent(Agent):
     simulated_default: bool = True
 
     def register(self) -> None:
-        # The Detection service invokes recommend_for_alert directly; the
-        # event-bus subscription lands when the agent runtime is wired up.
-        return None
+        self.bus.subscribe(EventType.ALERT_TRIAGED, self.on_alert_triaged)
+
+    async def on_alert_triaged(self, event: Event) -> None:
+        alert_id = event.payload.get("alert_id")
+        if alert_id is None:
+            return
+        async with session_scope() as session:
+            await self.respond_if_needed(session, int(alert_id))
+
+    async def respond_if_needed(self, session: AsyncSession, alert_id: int) -> list[ResponseAction]:
+        """Recommend actions iff the alert is TRIAGED with none yet.
+
+        Idempotent on two guards (status + existing actions), so repeated
+        ``alert.triaged`` events never create duplicate response actions. The
+        synchronous pipeline advances the alert past TRIAGED itself, so this is a
+        no-op for alerts it already handled.
+        """
+        alert = await session.get(Alert, alert_id)
+        if alert is None or alert.status != AlertStatus.TRIAGED:
+            return []
+        existing = (
+            await session.execute(
+                select(func.count(ResponseAction.id)).where(ResponseAction.alert_id == alert_id)
+            )
+        ).scalar_one()
+        if existing:
+            return []
+        actions = await self.recommend(session, alert, commit=True)
+        self.logger.info("agent.response.recommended", alert_id=alert_id, n=len(actions))
+        return actions
 
     async def recommend(
         self, session: AsyncSession, alert: Alert, *, commit: bool = True

@@ -263,7 +263,13 @@ demo day. Each item is tagged with severity for a course-project context.
   ingestion/detection lifecycle) to authenticated clients; the frontend
   `StreamProvider` invalidates the matching TanStack Query keys so the UI
   updates without waiting for polling. Auth is via a `?token=` JWT; events fire
-  only after the DB commit succeeds. See [API.md](API.md#event-stream-websocket).
+  only after the DB commit succeeds. Fan-out is **Redis pub/sub-backed**, so it
+  works across multiple backend workers/replicas (local single-process fallback
+  when Redis is disabled in dev). See [API.md](API.md#event-stream-websocket).
+- **Event-driven agent runtime.** The five agents register idempotent,
+  state-guarded handlers on the dispatcher at startup; repeated/duplicate events
+  never double-process (covered by `tests/integration/test_agents.py`). No
+  single-worker caveat remains for broadcast or the workflow.
 - **Hardcoded `ui-analyst` analyst id** in three frontend places. Find and
   replace when auth lands.
 - **Frontend doesn't show a global toast on mutation success/failure.**

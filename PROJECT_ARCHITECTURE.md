@@ -89,13 +89,45 @@ See [docs/ETHICS.md](docs/ETHICS.md).
 
 ## 2. Agent Modules — Responsibilities
 
-Each agent is a **plain Python class** under `backend/app/agents/`. They communicate through an in-process event bus (`core/events.py`) and share state via the database. No external orchestrator is needed at this scale; the workflow is a deterministic state machine driven by alert status transitions.
+Each agent is a **plain Python class** under `backend/app/agents/`. They register
+handlers on the in-process **event dispatcher** (`core/events.py`) at startup
+(`agents/runtime.register_agents`, called from the app lifespan) and share state
+via the database. The workflow is a deterministic state machine driven by alert
+status transitions.
+
+**Event-driven workflow (agents subscribe to events):**
+
+```
+ingestion.job_completed → DetectionAgent (REPLAY jobs, if auto-run configured)
+alert.created           → TriageAgent       (triage if still NEW)
+alert.triaged           → ResponseAgent      (recommend if TRIAGED, no actions yet)
+alert.responded         → InvestigationAgent (only if SENTINEL_INVESTIGATION_AUTO)
+alert.investigated      → ReportingAgent     (only if SENTINEL_REPORTING_AUTO)
+```
+
+Handlers are **idempotent and state-guarded**: the synchronous detection
+pipeline (`detect_events`) triages + responds inline in one transaction, so the
+event handlers see the alert already advanced and no-op — meaning repeated or
+duplicate events never double-process. Investigation + Reporting stay
+analyst-triggered unless their automation flag is set. Explicit API actions still
+call the services directly; the agents are the automatic layer on top.
 
 **Workflow state machine:**
 
 ```
 NEW → TRIAGED → {AUTO_RESPONDED | AWAITING_ANALYST} → INVESTIGATED → REPORTED → CLOSED
 ```
+
+**Events emit after commit** (post-commit pattern): services publish only once a
+transaction has committed, so rolled-back work is never dispatched or broadcast.
+
+**WebSocket fan-out is cross-worker** via Redis pub/sub (`core/broadcast.py`):
+events are published to a Redis channel that every backend process subscribes to
+and re-broadcasts to its own local WebSocket clients — so the dashboard works
+behind multiple workers/replicas. Without Redis (dev) it falls back to a
+single-process local broadcast. The in-process event bus drives the **agents**
+(once, on the originating worker); the broadcaster drives **WebSocket delivery**
+(every worker) — keeping business logic single-run while UI updates fan out.
 
 ### 2.1 Detection Agent — `agents/detection.py`
 
@@ -172,7 +204,8 @@ SentinelAI/
 │   │   ├── core/
 │   │   │   ├── config.py            ← pydantic-settings
 │   │   │   ├── db.py                ← engine, session, Base
-│   │   │   ├── events.py            ← in-process pub/sub
+│   │   │   ├── events.py            ← event dispatcher (agents) + publish_event
+│   │   │   ├── broadcast.py         ← WebSocket fan-out (Redis pub/sub / local)
 │   │   │   ├── security.py          ← API key + JWT helpers
 │   │   │   └── logging.py
 │   │   ├── models/                  ← SQLAlchemy models
@@ -528,7 +561,7 @@ Architecture review, not code execution:
 
 - The CIC-IDS2017 dataset will be downloaded by the developer separately and placed under `ml/data/` (gitignored); the repo ships only a small sample slice under `backend/data/samples/`.
 - A single-analyst demo is sufficient; multi-tenant auth and RBAC are out of scope.
-- Postgres is acceptable as the only datastore — no Redis, Kafka, or Elasticsearch — because the modular monolith and in-process event bus fit the project's scale.
+- Postgres is the primary datastore; **Redis** is used for rate limiting and cross-worker WebSocket pub/sub (required in production, optional in dev). No Kafka or Elasticsearch — the modular monolith plus Redis fan-out fits the project's scale while still running correctly behind multiple workers.
 - "Real-time" means seconds-level latency over a WebSocket from replayed CSV flows, not true wire-rate packet capture.
 - WeasyPrint (HTML → PDF) is acceptable for the reporting agent; no LaTeX toolchain required.
 - The simulated-response constraint is **non-negotiable**: any future "live action" adapter would require an explicit course-instructor approval and a separate review.

@@ -11,6 +11,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
+from app.agents.runtime import register_agents
 from app.api.deps import enforce_rbac, rate_limit
 from app.api.routers import (
     alerts,
@@ -22,6 +23,12 @@ from app.api.routers import (
     reports,
     response,
     stream,
+)
+from app.core.broadcast import (
+    LocalBroadcaster,
+    RedisBroadcaster,
+    get_broadcaster,
+    set_broadcaster,
 )
 from app.core.config import get_settings
 from app.core.csrf import CsrfMiddleware
@@ -75,6 +82,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         raise RuntimeError("SameSite=None auth cookies require SENTINEL_AUTH_COOKIE_SECURE=true.")
 
     await _configure_rate_limiter(settings)
+    await _configure_broadcaster(settings)
+
+    # Register the agent runtime on the in-process event bus (idempotent,
+    # state-guarded handlers; see app.agents.runtime).
+    register_agents()
 
     # Best-effort model load. The backend stays serviceable without a model;
     # detection endpoints return a clear error and operators can stage an
@@ -122,6 +134,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         heartbeat.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await heartbeat
+        await get_broadcaster().aclose()
         await get_rate_limiter().aclose()
         await dispose_engine()
         logger.info("backend.shutdown")
@@ -177,6 +190,42 @@ async def _configure_rate_limiter(settings) -> None:
 
     set_rate_limiter(RedisRateLimiter(client))
     logger.info("ratelimit.backend", backend="redis", url=settings.redis_url)
+
+
+async def _configure_broadcaster(settings) -> None:
+    """Pick the WebSocket broadcaster: Redis pub/sub (cross-worker) or local.
+
+    Mirrors the rate limiter: production requires Redis (fails closed); dev falls
+    back to a single-process local broadcast with a warning.
+    """
+    if not settings.redis_url:
+        if settings.is_production:
+            raise RuntimeError(
+                "SENTINEL_REDIS_URL is required for WebSocket broadcast in production."
+            )
+        set_broadcaster(LocalBroadcaster())
+        logger.warning("broadcast.no_redis_url", backend="local", env=settings.env)
+        return
+
+    try:
+        import redis.asyncio as aioredis
+
+        client = aioredis.from_url(settings.redis_url, decode_responses=True)
+        await client.ping()
+    except Exception as exc:
+        if settings.is_production:
+            raise RuntimeError(
+                f"Redis is required for WebSocket broadcast in production but is "
+                f"unreachable at {settings.redis_url}: {exc}"
+            ) from exc
+        set_broadcaster(LocalBroadcaster())
+        logger.warning("broadcast.redis_unavailable_dev_fallback", backend="local", error=str(exc))
+        return
+
+    broadcaster = RedisBroadcaster(client)
+    await broadcaster.start()
+    set_broadcaster(broadcaster)
+    logger.info("broadcast.backend", backend="redis", channel="sentinelai:events")
 
 
 def create_app() -> FastAPI:

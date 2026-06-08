@@ -1,19 +1,20 @@
 """WebSocket connection manager.
 
-Tracks the set of connected dashboard clients and fans out every event bus
-message to them as JSON. Broken sockets are detected on send and dropped, so a
-client that vanished without a clean close can't wedge the broadcast loop.
+Tracks this process's connected dashboard clients and fans a message out to them
+as JSON. Broken sockets are detected on send and dropped, so a client that
+vanished without a clean close can't wedge the broadcast loop.
 
-The manager subscribes to the event bus wildcard at import time, so any
-``publish_event(...)`` anywhere in the app reaches connected clients without
-extra wiring.
+The manager is driven by the **broadcaster** (:mod:`app.core.broadcast`), not the
+event bus directly: with Redis pub/sub every worker's broadcaster forwards events
+to its own local clients, so fan-out works across workers. In single-process /
+dev mode the local broadcaster calls :meth:`broadcast` directly.
 """
 
 from __future__ import annotations
 
 from fastapi import WebSocket
 
-from app.core.events import Event, get_event_bus
+from app.core.events import Event
 from app.core.logging import get_logger
 from app.core.metrics import WS_CONNECTIONS
 
@@ -62,7 +63,11 @@ class ConnectionManager:
             logger.info("ws.pruned", removed=len(dead), clients=len(self._clients))
 
     async def on_event(self, event: Event) -> None:
-        """Bus handler: serialize an event and broadcast it."""
+        """Serialize an event and broadcast it to local clients.
+
+        Kept as a convenience (and used by the local broadcaster path / tests);
+        the broadcaster is the normal driver of fan-out.
+        """
         await self.broadcast(
             {
                 "type": event.type,
@@ -72,9 +77,9 @@ class ConnectionManager:
         )
 
 
-# Process-wide singleton, wired to the event bus once at import.
+# Process-wide singleton. Fan-out is driven by the broadcaster (see
+# app.core.broadcast), which works across workers when Redis is configured.
 manager = ConnectionManager()
-get_event_bus().subscribe("*", manager.on_event)
 
 
 def get_connection_manager() -> ConnectionManager:

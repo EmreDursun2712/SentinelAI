@@ -98,6 +98,12 @@ class Settings(BaseSettings):
     # Live-sensor status: how recent ingest activity must be to count as "live".
     sensor_live_window_seconds: int = 120
 
+    # Agent runtime automation. Triage + Response agents always run (idempotent:
+    # they no-op when the synchronous detection pipeline already handled the
+    # alert). Investigation + Reporting stay analyst-triggered unless enabled.
+    investigation_auto: bool = False
+    reporting_auto: bool = False
+
     # Reporting
     reports_dir: str = "data/reports"
 
