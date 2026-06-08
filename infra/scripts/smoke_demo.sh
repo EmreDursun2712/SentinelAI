@@ -67,7 +67,8 @@ curl -sf "$BASE/health" >/dev/null \
 ok "backend is up"
 
 READYZ=$(curl -s "$BASE/readyz")
-DB_STATUS=$(echo "$READYZ" | jq -r '.db')
+# /readyz returns structured per-dependency checks: .checks.database.status
+DB_STATUS=$(echo "$READYZ" | jq -r '.checks.database.status')
 [[ "$DB_STATUS" == "ok" ]] \
     || fail "database not ready (db=$DB_STATUS)"
 ok "database is ready"
