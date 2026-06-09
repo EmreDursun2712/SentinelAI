@@ -2,8 +2,8 @@
 
 Convention follows Kubernetes probes:
   - /health   liveness: the process is up. Never checks dependencies.
-  - /readyz    readiness: structured dependency status (DB, Redis, model).
-               Returns 503 when a *required* dependency is down so an
+  - /readyz    readiness: structured dependency status (DB, Redis, task queue,
+               model). Returns 503 when a *required* dependency is down so an
                orchestrator can pull the instance from rotation.
   - /metrics   Prometheus exposition (text). Public + cheap — restrict at the
                network layer in production (see docs/DEPLOYMENT_SECURITY.md).

@@ -543,6 +543,7 @@ export interface ReadyzResponse {
   checks: {
     database: DependencyCheck;
     redis: DependencyCheck;
+    queue: DependencyCheck;
     model: DependencyCheck;
   };
 }

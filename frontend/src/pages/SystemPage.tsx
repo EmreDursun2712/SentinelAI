@@ -72,6 +72,7 @@ export default function SystemPage() {
   const ready = readyQ.data?.status === "ready";
   const model = checks?.model;
   const redis = checks?.redis;
+  const queue = checks?.queue;
 
   const refresh = () => {
     healthQ.refetch();
@@ -115,6 +116,11 @@ export default function SystemPage() {
               title="Redis (rate limiter)"
               check={redis}
               detail={redis?.backend ? `backend: ${redis.backend}` : undefined}
+            />
+            <DepCard
+              title="Task queue (worker)"
+              check={queue}
+              detail={queue?.backend ? `backend: ${queue.backend}` : undefined}
             />
             <DepCard
               title="Detection model"
