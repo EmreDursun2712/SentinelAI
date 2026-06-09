@@ -19,6 +19,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@/components/ui/Table";
 import { detectionApi, ingestionApi } from "@/lib/api";
 import { ApiError } from "@/lib/api";
+import { useToast } from "@/lib/toast/ToastContext";
 import { cn } from "@/lib/cn";
 import { formatDateTime, formatRelative } from "@/lib/format";
 import type {
@@ -40,6 +41,7 @@ type StepState = "pending" | "current" | "in_progress" | "done" | "error";
 export default function IngestionPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const toast = useToast();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const step2Ref = useRef<HTMLDivElement>(null);
@@ -83,9 +85,11 @@ export default function IngestionPage() {
       if (fileInputRef.current) fileInputRef.current.value = "";
       qc.invalidateQueries({ queryKey: ["ingest", "jobs"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
+      toast.success(`Ingested ${summary.valid_rows} valid row(s) from ${summary.source}.`);
     },
     onError: (err) => {
       setStep1Error(formatError(err));
+      toast.error(formatError(err), { title: "Upload failed" });
     },
   });
 
@@ -98,9 +102,11 @@ export default function IngestionPage() {
       setStep2Error(null);
       qc.invalidateQueries({ queryKey: ["ingest", "jobs"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
+      toast.success(`Replayed sample — ${summary.valid_rows} row(s) ingested.`);
     },
     onError: (err) => {
       setStep1Error(formatError(err));
+      toast.error(formatError(err), { title: "Replay failed" });
     },
   });
 
@@ -112,9 +118,13 @@ export default function IngestionPage() {
       qc.invalidateQueries({ queryKey: ["alerts"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       qc.invalidateQueries({ queryKey: ["response"] });
+      toast.success(
+        `Detection done — ${summary.alerts_created} alert(s) from ${summary.processed} event(s).`,
+      );
     },
     onError: (err) => {
       setStep2Error(formatError(err));
+      toast.error(formatError(err), { title: "Detection failed" });
     },
   });
 

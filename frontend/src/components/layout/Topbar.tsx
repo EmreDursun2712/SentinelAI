@@ -5,6 +5,7 @@ import { ConnectionPill } from "@/components/ConnectionPill";
 import { Button } from "@/components/ui/Button";
 import { healthApi } from "@/lib/api";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { useToast } from "@/lib/toast/ToastContext";
 import { checkLabel, isCheckHealthy } from "@/lib/readiness";
 import { useStreamStatus } from "@/lib/stream/StreamProvider";
 
@@ -30,9 +31,11 @@ export function Topbar() {
   const { user, logout } = useAuth();
   const { connected: live } = useStreamStatus();
   const navigate = useNavigate();
+  const toast = useToast();
 
   async function handleLogout() {
     await logout();
+    toast.info("Signed out.");
     navigate("/login", { replace: true });
   }
 

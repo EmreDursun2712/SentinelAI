@@ -25,6 +25,7 @@ from app.api.routers import (
     response,
     stream,
     tasks,
+    telemetry,
 )
 from app.core.broadcast import (
     LocalBroadcaster,
@@ -317,6 +318,9 @@ def create_app() -> FastAPI:
 
     # Auth is public at /login; /me, /logout, /users self-guard internally.
     app.include_router(auth.router, prefix=API_V1_PREFIX, tags=["auth"])
+
+    # Client telemetry is public (errors can occur pre-login) + self-rate-limited.
+    app.include_router(telemetry.router, prefix=API_V1_PREFIX, tags=["telemetry"])
 
     # Every functional API router is behind method-based RBAC and a general
     # per-user rate limit:

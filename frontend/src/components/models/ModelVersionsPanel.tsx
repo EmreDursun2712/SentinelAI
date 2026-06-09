@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -8,13 +7,17 @@ import { Spinner } from "@/components/ui/Spinner";
 import { modelsApi } from "@/lib/api";
 import { errorMessage } from "@/lib/api/errors";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { useConfirm } from "@/lib/confirm/ConfirmProvider";
+import { useToast } from "@/lib/toast/ToastContext";
 import { formatRelative } from "@/lib/format";
+import type { ModelVersion } from "@/lib/types";
 
 export function ModelVersionsPanel() {
   const { hasRole } = useAuth();
   const qc = useQueryClient();
+  const toast = useToast();
+  const confirm = useConfirm();
   const isAdmin = hasRole("ADMIN");
-  const [actionError, setActionError] = useState<string | null>(null);
 
   const modelsQ = useQuery({
     queryKey: ["models", "versions"],
@@ -29,21 +32,40 @@ export function ModelVersionsPanel() {
 
   const activateMut = useMutation({
     mutationFn: (id: number) => modelsApi.activateModel(id),
-    onSuccess: () => {
-      setActionError(null);
+    onSuccess: (res) => {
       invalidate();
+      toast.success(`Activated model ${res.version.version}.`);
     },
-    onError: (e) => setActionError(errorMessage(e, "Activation failed.")),
+    onError: (e) => toast.error(errorMessage(e, "Activation failed.")),
   });
 
   const rollbackMut = useMutation({
     mutationFn: () => modelsApi.rollbackModel(),
-    onSuccess: () => {
-      setActionError(null);
+    onSuccess: (res) => {
       invalidate();
+      toast.success(`Rolled back to ${res.version.version}.`);
     },
-    onError: (e) => setActionError(errorMessage(e, "Rollback failed.")),
+    onError: (e) => toast.error(errorMessage(e, "Rollback failed.")),
   });
+
+  async function handleActivate(v: ModelVersion) {
+    const { confirmed } = await confirm({
+      title: `Activate ${v.version}?`,
+      confirmLabel: "Activate",
+      message: `This model will start serving detection immediately, replacing the current active version.`,
+    });
+    if (confirmed) activateMut.mutate(v.id);
+  }
+
+  async function handleRollback() {
+    const { confirmed } = await confirm({
+      title: "Roll back to previous version?",
+      tone: "danger",
+      confirmLabel: "Roll back",
+      message: "This re-activates the version that was active before the latest activation.",
+    });
+    if (confirmed) rollbackMut.mutate();
+  }
 
   const versions = modelsQ.data?.items ?? [];
   const busy = activateMut.isPending || rollbackMut.isPending;
@@ -61,7 +83,7 @@ export function ModelVersionsPanel() {
           <Button
             size="sm"
             variant="secondary"
-            onClick={() => rollbackMut.mutate()}
+            onClick={handleRollback}
             disabled={busy || versions.length < 2}
           >
             {rollbackMut.isPending && <Spinner className="h-3 w-3" />}
@@ -69,8 +91,6 @@ export function ModelVersionsPanel() {
           </Button>
         )}
       </div>
-
-      {actionError && <p className="mt-2 text-xs text-rose-400">{actionError}</p>}
 
       {modelsQ.isLoading ? (
         <div className="flex justify-center py-6 text-slate-400">
@@ -99,11 +119,7 @@ export function ModelVersionsPanel() {
                 </p>
               </div>
               {isAdmin && !v.is_active && (
-                <Button
-                  size="sm"
-                  onClick={() => activateMut.mutate(v.id)}
-                  disabled={busy}
-                >
+                <Button size="sm" onClick={() => handleActivate(v)} disabled={busy}>
                   Activate
                 </Button>
               )}

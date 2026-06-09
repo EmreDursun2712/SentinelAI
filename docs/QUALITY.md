@@ -18,13 +18,17 @@ known weak points, and the pre-demo checklist that keeps that budget intact.
 | Backend report   | `tests/test_reporting.py`        |    27 |   no     |    no         | `pytest tests/test_reporting.py`                              |
 | Backend detect   | `tests/test_detection.py`        |    11 |   no     |   **yes**     | `pytest tests/test_detection.py` (needs `pip install -e .[dev]`) |
 | Backend API      | `tests/test_health.py`           |     6 | optional |   **yes**     | `pytest tests/test_health.py`                                 |
-| Frontend unit    | `src/**/*.test.{ts,tsx}`         |    29 |   no     |    no         | `npm test`                                                    |
+| Frontend unit    | `src/**/*.test.{ts,tsx}`         |    92 |   no     |    no         | `npm test` (unit + component + page render + modal/confirm)   |
+| Frontend E2E     | `frontend/e2e/**`                |     6 |  **yes** |   **yes**     | `npm run test:e2e` (Playwright — needs the running stack)     |
 | End-to-end smoke | `infra/scripts/smoke_demo.sh`    |    11 |  **yes** |   **yes**     | `bash infra/scripts/smoke_demo.sh` (needs running stack)      |
 | Integration      | `tests/integration/**`           |    62 | **real** |    no         | `pytest -m integration` (needs **Docker** — see §1.1)        |
 | ML pipeline      | `ml/tests/**`                    |    33 |   no     |   **yes**     | `python -m pytest ml/tests` (feature parity, HPO, calibration, profiles) |
 
-**Totals**: backend unit (350) + frontend (77) + ML (33) + e2e checks, plus 62
-real-Postgres integration tests on a separate `-m integration` lane.
+**Totals**: backend unit (353) + frontend (92 vitest + 6 Playwright e2e) + ML
+(33) + e2e checks, plus 62 real-Postgres integration tests on a separate
+`-m integration` lane. Frontend coverage spans the UI primitives (toasts,
+accessible Modal/Confirm), page render tests (Login, Dashboard, ResponseCenter,
+AlertDetail, Reports), and the critical user flows end-to-end.
 
 ### Running everything
 

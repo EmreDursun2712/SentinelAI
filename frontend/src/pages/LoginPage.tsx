@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { useToast } from "@/lib/toast/ToastContext";
 
 interface LocationState {
   from?: { pathname?: string };
@@ -13,6 +14,7 @@ interface LocationState {
 
 export default function LoginPage() {
   const { login, isAuthenticated, loading } = useAuth();
+  const toast = useToast();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as LocationState | null)?.from?.pathname ?? "/";
@@ -33,6 +35,7 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       await login(username.trim(), password);
+      toast.success("Signed in.");
       navigate(from, { replace: true });
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
@@ -71,6 +74,8 @@ export default function LoginPage() {
               type="text"
               autoComplete="username"
               required
+              aria-invalid={error != null}
+              aria-describedby={error ? "login-error" : undefined}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
@@ -88,6 +93,8 @@ export default function LoginPage() {
               type="password"
               autoComplete="current-password"
               required
+              aria-invalid={error != null}
+              aria-describedby={error ? "login-error" : undefined}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
@@ -97,6 +104,7 @@ export default function LoginPage() {
 
           {error && (
             <p
+              id="login-error"
               role="alert"
               className="rounded-md border border-rose-900/60 bg-rose-950/40 px-3 py-2 text-xs text-rose-300"
             >

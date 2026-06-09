@@ -4,9 +4,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
 
 import App from "@/App";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { shouldRetry } from "@/lib/api/errors";
 import { AuthProvider } from "@/lib/auth/AuthContext";
+import { ConfirmProvider } from "@/lib/confirm/ConfirmProvider";
 import { StreamProvider } from "@/lib/stream/StreamProvider";
+import { ToastProvider } from "@/lib/toast/ToastContext";
 import "@/styles/globals.css";
 
 const queryClient = new QueryClient({
@@ -28,14 +31,20 @@ if (!rootElement) {
 
 createRoot(rootElement).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <AuthProvider>
-          <StreamProvider>
-            <App />
-          </StreamProvider>
-        </AuthProvider>
-      </BrowserRouter>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <ToastProvider>
+            <ConfirmProvider>
+              <AuthProvider>
+                <StreamProvider>
+                  <App />
+                </StreamProvider>
+              </AuthProvider>
+            </ConfirmProvider>
+          </ToastProvider>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ErrorBoundary>
   </StrictMode>,
 );

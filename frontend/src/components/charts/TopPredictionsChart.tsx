@@ -67,7 +67,14 @@ export function TopPredictionsChart({ byPrediction, topN = 6 }: Props) {
       : []),
   ];
 
+  const summary = `Top attack categories by alert count: ${data
+    .map((d) => `${d.name} ${d.value}`)
+    .join(", ")}.`;
+
   return (
+    <figure className="m-0" aria-label={summary}>
+      <figcaption className="sr-only">{summary}</figcaption>
+      <div aria-hidden="true">
     <ResponsiveContainer width="100%" height={260}>
       <BarChart
         data={data}
@@ -108,5 +115,7 @@ export function TopPredictionsChart({ byPrediction, topN = 6 }: Props) {
         </Bar>
       </BarChart>
     </ResponsiveContainer>
+      </div>
+    </figure>
   );
 }

@@ -8,6 +8,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { detectionApi } from "@/lib/api";
 import { errorMessage } from "@/lib/api/errors";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { useToast } from "@/lib/toast/ToastContext";
 import { driftReasonText, driftStatusTone, topDriftingFeatures } from "@/lib/drift";
 import { formatConfidence, formatNumber, formatRelative } from "@/lib/format";
 
@@ -22,6 +23,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 export function ModelHealthPanel() {
   const qc = useQueryClient();
+  const toast = useToast();
   const { hasRole } = useAuth();
   const canRun = hasRole("ANALYST");
 
@@ -36,7 +38,13 @@ export function ModelHealthPanel() {
     onSuccess: (report) => {
       qc.setQueryData(["detection", "drift"], report);
       qc.invalidateQueries({ queryKey: ["detection", "drift"] });
+      toast.success(
+        report.available && report.snapshot
+          ? `Drift check complete — status ${report.snapshot.status}.`
+          : "Drift check ran (no recent data to score).",
+      );
     },
+    onError: (err) => toast.error(errorMessage(err, "Drift check failed.")),
   });
 
   const runButton = canRun ? (

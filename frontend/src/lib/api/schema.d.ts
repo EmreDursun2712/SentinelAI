@@ -1075,6 +1075,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/telemetry/client-error": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Report Client Error */
+        post: operations["report_client_error_api_v1_telemetry_client_error_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -1450,6 +1467,20 @@ export interface components {
              * @description CSV file with one flow per row.
              */
             file: string;
+        };
+        /**
+         * ClientErrorIn
+         * @description A client-side (frontend) error reported by the ErrorBoundary.
+         */
+        ClientErrorIn: {
+            /** Component Stack */
+            component_stack?: string | null;
+            /** Message */
+            message: string;
+            /** Stack */
+            stack?: string | null;
+            /** Url */
+            url?: string | null;
         };
         /**
          * CloseAlertRequest
@@ -4957,6 +4988,39 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TaskOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    report_client_error_api_v1_telemetry_client_error_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientErrorIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

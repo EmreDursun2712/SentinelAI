@@ -38,7 +38,10 @@ export function Sidebar() {
   const { hasRole } = useAuth();
   const items = hasRole("ADMIN") ? [...NAV, ...ADMIN_NAV] : NAV;
   return (
-    <aside className="flex w-60 shrink-0 flex-col border-r border-slate-800 bg-slate-900/60">
+    <aside
+      aria-label="Sidebar"
+      className="flex w-60 shrink-0 flex-col border-r border-slate-800 bg-slate-900/60"
+    >
       <div className="border-b border-slate-800 p-5">
         <div className="flex items-center gap-2.5">
           <span className="flex h-9 w-9 items-center justify-center rounded-md bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/30">
@@ -53,7 +56,7 @@ export function Sidebar() {
         </div>
       </div>
 
-      <nav className="flex-1 space-y-0.5 p-3">
+      <nav aria-label="Primary" className="flex-1 space-y-0.5 p-3">
         {items.map((item) => (
           <NavLink
             key={item.to}
@@ -62,13 +65,14 @@ export function Sidebar() {
             className={({ isActive }) =>
               cn(
                 "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition",
+                "focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950",
                 isActive
                   ? "bg-slate-800 text-white shadow-inner"
                   : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-100",
               )
             }
           >
-            <item.icon className="h-4 w-4" />
+            <item.icon className="h-4 w-4" aria-hidden="true" />
             <span>{item.label}</span>
           </NavLink>
         ))}

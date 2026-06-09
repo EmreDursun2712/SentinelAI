@@ -52,8 +52,15 @@ export function AlertsOverTimeChart({ points }: Props) {
   }
 
   const data = points.map((p) => ({ ...p, _label: fmtHour(p.bucket) }));
+  const peak = points.reduce((m, p) => (p.total > m.total ? p : m), points[0]);
+  const summary =
+    `Alerts over time: ${totalAcrossWindow} alert(s) across ${points.length} hourly buckets, ` +
+    `peaking at ${peak.total} around ${fmtHour(peak.bucket)}.`;
 
   return (
+    <figure className="m-0" aria-label={summary}>
+      <figcaption className="sr-only">{summary}</figcaption>
+      <div aria-hidden="true">
     <ResponsiveContainer width="100%" height={260}>
       <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
         <defs>
@@ -120,5 +127,7 @@ export function AlertsOverTimeChart({ points }: Props) {
         ))}
       </AreaChart>
     </ResponsiveContainer>
+      </div>
+    </figure>
   );
 }

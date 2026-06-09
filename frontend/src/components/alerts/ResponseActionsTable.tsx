@@ -7,7 +7,9 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@/components/ui/Table";
 import { responseApi } from "@/lib/api";
+import { errorMessage } from "@/lib/api/errors";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { useConfirm } from "@/lib/confirm/ConfirmProvider";
 import {
   LAB_APPROVE_WARNING,
   canRollback,
@@ -15,60 +17,120 @@ import {
   executionModeTone,
   isRealLabAction,
 } from "@/lib/response";
-import type { ResponseActionOut } from "@/lib/types";
+import { useToast } from "@/lib/toast/ToastContext";
+import type { AlertDetail, ResponseActionOut } from "@/lib/types";
 
 interface ResponseActionsTableProps {
   alertId: number;
   actions: ResponseActionOut[];
 }
 
-export function ResponseActionsTable({
-  alertId,
-  actions,
-}: ResponseActionsTableProps) {
+export function ResponseActionsTable({ alertId, actions }: ResponseActionsTableProps) {
   const qc = useQueryClient();
+  const toast = useToast();
+  const confirm = useConfirm();
   const { user } = useAuth();
   const analystId = user?.username;
 
+  const alertKey = ["alert", alertId] as const;
+
+  // Optimistically patch one action in the cached AlertDetail; returns a context
+  // with the snapshot so onError can roll back to server truth.
+  const patchAction = async (id: number, patch: Partial<ResponseActionOut>) => {
+    await qc.cancelQueries({ queryKey: alertKey });
+    const prev = qc.getQueryData<AlertDetail>(alertKey);
+    if (prev) {
+      qc.setQueryData<AlertDetail>(alertKey, {
+        ...prev,
+        actions: prev.actions.map((a) => (a.id === id ? { ...a, ...patch } : a)),
+      });
+    }
+    return { prev };
+  };
+
+  const rollbackCache = (ctx: { prev?: AlertDetail } | undefined) => {
+    if (ctx?.prev) qc.setQueryData(alertKey, ctx.prev);
+  };
+
+  const settle = () => {
+    qc.invalidateQueries({ queryKey: alertKey });
+    qc.invalidateQueries({ queryKey: ["response"] });
+  };
+
   const approveMut = useMutation({
-    mutationFn: (id: number) =>
-      responseApi.approveResponseAction(id, { analyst_id: analystId }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["alert", alertId] });
-      qc.invalidateQueries({ queryKey: ["response"] });
+    mutationFn: ({ id, note }: { id: number; note?: string }) =>
+      responseApi.approveResponseAction(id, { analyst_id: analystId, note }),
+    onMutate: ({ id }) => patchAction(id, { status: "EXECUTED", executed: true }),
+    onError: (err, _vars, ctx) => {
+      rollbackCache(ctx);
+      toast.error(errorMessage(err, "Could not approve the action."));
     },
+    onSuccess: () => toast.success("Response action approved."),
+    onSettled: settle,
   });
+
   const rejectMut = useMutation({
     mutationFn: ({ id, reason }: { id: number; reason: string }) =>
-      responseApi.rejectResponseAction(id, {
-        analyst_id: analystId,
-        reason,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["alert", alertId] });
-      qc.invalidateQueries({ queryKey: ["response"] });
+      responseApi.rejectResponseAction(id, { analyst_id: analystId, reason }),
+    onMutate: ({ id }) => patchAction(id, { status: "REJECTED" }),
+    onError: (err, _vars, ctx) => {
+      rollbackCache(ctx);
+      toast.error(errorMessage(err, "Could not reject the action."));
     },
+    onSuccess: () => toast.success("Response action rejected."),
+    onSettled: settle,
   });
+
   const rollbackMut = useMutation({
     mutationFn: (id: number) =>
       responseApi.rollbackResponseAction(id, { analyst_id: analystId }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["alert", alertId] });
-      qc.invalidateQueries({ queryKey: ["response"] });
-    },
+    onError: (err) => toast.error(errorMessage(err, "Rollback failed.")),
+    onSuccess: () => toast.success("Lab action rolled back."),
+    onSettled: settle,
   });
 
-  function approveAction(act: ResponseActionOut) {
+  async function approveAction(act: ResponseActionOut) {
     if (!isRealLabAction(act)) {
-      approveMut.mutate(act.id);
+      approveMut.mutate({ id: act.id });
       return;
     }
-    const reason = window.prompt(
-      `⚠ Real LAB action on ${String(act.payload?.target_ip ?? "the lab")}.\n` +
-        `${LAB_APPROVE_WARNING}\nType a reason to confirm:`,
-      "",
-    );
-    if (reason && reason.trim()) approveMut.mutate(act.id);
+    const { confirmed, reason } = await confirm({
+      title: "Approve real LAB action",
+      tone: "danger",
+      confirmLabel: "Approve LAB action",
+      typedConfirmation: "CONFIRM",
+      requireReason: true,
+      reasonLabel: "Reason for approval",
+      message: (
+        <>
+          This approves a <strong>real</strong> action against{" "}
+          <span className="font-mono">{String(act.payload?.target_ip ?? "the lab")}</span>.{" "}
+          {LAB_APPROVE_WARNING}
+        </>
+      ),
+    });
+    if (confirmed) approveMut.mutate({ id: act.id, note: reason });
+  }
+
+  async function rejectAction(act: ResponseActionOut) {
+    const { confirmed, reason } = await confirm({
+      title: `Reject action #${act.id}`,
+      tone: "danger",
+      confirmLabel: "Reject action",
+      requireReason: true,
+      reasonLabel: "Reason for rejection",
+    });
+    if (confirmed && reason) rejectMut.mutate({ id: act.id, reason });
+  }
+
+  async function rollbackAction(act: ResponseActionOut) {
+    const { confirmed } = await confirm({
+      title: `Roll back lab action #${act.id}`,
+      tone: "danger",
+      confirmLabel: "Roll back",
+      message: `${LAB_APPROVE_WARNING} This reverts the real lab effect.`,
+    });
+    if (confirmed) rollbackMut.mutate(act.id);
   }
 
   return (
@@ -88,7 +150,7 @@ export function ResponseActionsTable({
       {actions.length === 0 ? (
         <EmptyState title="No response actions for this alert" />
       ) : (
-        <Table>
+        <Table aria-label="Response recommendations">
           <Thead>
             <Tr>
               <Th>#</Th>
@@ -134,7 +196,7 @@ export function ResponseActionsTable({
                         disabled={approveMut.isPending}
                         onClick={() => approveAction(act)}
                       >
-                        {approveMut.isPending && approveMut.variables === act.id && (
+                        {approveMut.isPending && approveMut.variables?.id === act.id && (
                           <Spinner className="h-3 w-3" />
                         )}
                         {isRealLabAction(act) ? "Approve (LAB)" : "Approve"}
@@ -143,14 +205,7 @@ export function ResponseActionsTable({
                         size="sm"
                         variant="danger"
                         disabled={rejectMut.isPending}
-                        onClick={() => {
-                          const reason = window.prompt(
-                            "Reason for rejection?",
-                            "",
-                          );
-                          if (reason && reason.trim())
-                            rejectMut.mutate({ id: act.id, reason });
-                        }}
+                        onClick={() => rejectAction(act)}
                       >
                         Reject
                       </Button>
@@ -160,10 +215,7 @@ export function ResponseActionsTable({
                       size="sm"
                       variant="secondary"
                       disabled={rollbackMut.isPending}
-                      onClick={() => {
-                        if (window.confirm(`Roll back lab action #${act.id}?`))
-                          rollbackMut.mutate(act.id);
-                      }}
+                      onClick={() => rollbackAction(act)}
                     >
                       {rollbackMut.isPending && rollbackMut.variables === act.id && (
                         <Spinner className="h-3 w-3" />

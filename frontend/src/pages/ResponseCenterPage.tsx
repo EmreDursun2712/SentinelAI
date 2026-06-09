@@ -15,6 +15,7 @@ import { Table, Tbody, Td, Th, Thead, Tr } from "@/components/ui/Table";
 import { dashboardApi, responseApi } from "@/lib/api";
 import { errorMessage } from "@/lib/api/errors";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { useConfirm } from "@/lib/confirm/ConfirmProvider";
 import {
   LAB_APPROVE_WARNING,
   canRollback,
@@ -22,6 +23,7 @@ import {
   executionModeTone,
   isRealLabAction,
 } from "@/lib/response";
+import { useToast } from "@/lib/toast/ToastContext";
 import { useLiveInterval } from "@/lib/stream/StreamProvider";
 import { formatRelative } from "@/lib/format";
 import type { ResponseActionOut, ResponseActionType, ResponseStatus } from "@/lib/types";
@@ -52,6 +54,8 @@ function statusTone(s: ResponseStatus): "info" | "success" | "warning" | "neutra
 
 export default function ResponseCenterPage() {
   const qc = useQueryClient();
+  const toast = useToast();
+  const confirm = useConfirm();
   const { user } = useAuth();
   const analystId = user?.username;
   const [actionFilter, setActionFilter] = useState<ResponseActionType | "">("");
@@ -83,36 +87,102 @@ export default function ResponseCenterPage() {
     refetchInterval: useLiveInterval(30_000),
   });
 
+  // Optimistically drop a decided action from every cached pending list, with a
+  // snapshot so onError can restore server truth.
+  const dropFromPending = async (id: number) => {
+    await qc.cancelQueries({ queryKey: ["response", "pending"] });
+    const snapshots = qc.getQueriesData<ResponseActionOut[]>({ queryKey: ["response", "pending"] });
+    for (const [key, data] of snapshots) {
+      if (data) qc.setQueryData(key, data.filter((a) => a.id !== id));
+    }
+    return { snapshots };
+  };
+
+  const restorePending = (ctx: { snapshots?: [readonly unknown[], ResponseActionOut[] | undefined][] } | undefined) => {
+    ctx?.snapshots?.forEach(([key, data]) => qc.setQueryData(key, data));
+  };
+
+  const settle = () => {
+    qc.invalidateQueries({ queryKey: ["response"] });
+    qc.invalidateQueries({ queryKey: ["alert"] });
+    qc.invalidateQueries({ queryKey: ["dashboard"] });
+  };
+
   const approve = useMutation({
     mutationFn: ({ id, note }: { id: number; note?: string }) =>
       responseApi.approveResponseAction(id, { analyst_id: analystId, note }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["response"] });
-      qc.invalidateQueries({ queryKey: ["alert"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
+    onMutate: ({ id }) => dropFromPending(id),
+    onError: (err, _v, ctx) => {
+      restorePending(ctx);
+      toast.error(errorMessage(err, "Could not approve the action."));
     },
+    onSuccess: () => toast.success("Response action approved."),
+    onSettled: settle,
   });
+
+  const reject = useMutation({
+    mutationFn: ({ id, reason }: { id: number; reason: string }) =>
+      responseApi.rejectResponseAction(id, { analyst_id: analystId, reason }),
+    onMutate: ({ id }) => dropFromPending(id),
+    onError: (err, _v, ctx) => {
+      restorePending(ctx);
+      toast.error(errorMessage(err, "Could not reject the action."));
+    },
+    onSuccess: () => toast.success("Response action rejected."),
+    onSettled: settle,
+  });
+
   const rollback = useMutation({
     mutationFn: (id: number) =>
       responseApi.rollbackResponseAction(id, { analyst_id: analystId }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["response"] });
-      qc.invalidateQueries({ queryKey: ["alert"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
-    },
+    onError: (err) => toast.error(errorMessage(err, "Rollback failed.")),
+    onSuccess: () => toast.success("Lab action rolled back."),
+    onSettled: settle,
   });
-  const reject = useMutation({
-    mutationFn: ({ id, reason }: { id: number; reason: string }) =>
-      responseApi.rejectResponseAction(id, {
-        analyst_id: analystId,
-        reason,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["response"] });
-      qc.invalidateQueries({ queryKey: ["alert"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
-    },
-  });
+
+  async function handleApprove(action: ResponseActionOut) {
+    if (!isRealLabAction(action)) {
+      approve.mutate({ id: action.id });
+      return;
+    }
+    const { confirmed, reason } = await confirm({
+      title: "Approve real LAB action",
+      tone: "danger",
+      confirmLabel: "Approve LAB action",
+      typedConfirmation: "CONFIRM",
+      requireReason: true,
+      reasonLabel: "Reason for approval",
+      message: (
+        <>
+          This approves a <strong>real</strong> action against{" "}
+          <span className="font-mono">{String(action.payload?.target_ip ?? "the lab")}</span>.{" "}
+          {LAB_APPROVE_WARNING}
+        </>
+      ),
+    });
+    if (confirmed) approve.mutate({ id: action.id, note: reason });
+  }
+
+  async function handleReject(action: ResponseActionOut) {
+    const { confirmed, reason } = await confirm({
+      title: `Reject action #${action.id}`,
+      tone: "danger",
+      confirmLabel: "Reject action",
+      requireReason: true,
+      reasonLabel: "Reason for rejection",
+    });
+    if (confirmed && reason) reject.mutate({ id: action.id, reason });
+  }
+
+  async function handleRollback(action: ResponseActionOut) {
+    const { confirmed } = await confirm({
+      title: `Roll back lab action #${action.id}`,
+      tone: "danger",
+      confirmLabel: "Roll back",
+      message: `${LAB_APPROVE_WARNING} This reverts the real lab effect.`,
+    });
+    if (confirmed) rollback.mutate(action.id);
+  }
 
   // Last-24h derived counts from the recent feed.
   const stats = useMemo(() => {
@@ -171,9 +241,7 @@ export default function ResponseCenterPage() {
           <Select
             label="Action type"
             value={actionFilter}
-            onChange={(e) =>
-              setActionFilter(e.target.value as ResponseActionType | "")
-            }
+            onChange={(e) => setActionFilter(e.target.value as ResponseActionType | "")}
           >
             <option value="">Any</option>
             {ACTION_TYPES.map((t) => (
@@ -201,21 +269,13 @@ export default function ResponseCenterPage() {
       <Card padding="none">
         <div className="flex items-center justify-between border-b border-slate-800 px-5 py-3">
           <div>
-            <h3 className="text-sm font-semibold text-slate-200">
-              Pending queue
-            </h3>
+            <h3 className="text-sm font-semibold text-slate-200">Pending queue</h3>
             <p className="text-xs text-slate-500">
               {pendingQ.data?.length ?? 0} action(s) awaiting decision
               {actionFilter && ` · filtered to ${actionFilter}`}.
             </p>
           </div>
         </div>
-
-        {(approve.error || reject.error) && (
-          <p className="border-b border-rose-900/40 bg-rose-950/30 px-5 py-2 text-xs text-rose-300">
-            {errorMessage(approve.error ?? reject.error, "Action failed.")}
-          </p>
-        )}
 
         {pendingQ.isLoading ? (
           <div className="flex justify-center p-10 text-slate-400">
@@ -236,8 +296,8 @@ export default function ResponseCenterPage() {
                 action={a}
                 isApproving={approve.isPending && approve.variables?.id === a.id}
                 isRejecting={reject.isPending && reject.variables?.id === a.id}
-                onApprove={(note) => approve.mutate({ id: a.id, note })}
-                onReject={(reason) => reject.mutate({ id: a.id, reason })}
+                onApprove={() => handleApprove(a)}
+                onReject={() => handleReject(a)}
               />
             ))}
           </ul>
@@ -247,12 +307,10 @@ export default function ResponseCenterPage() {
       {/* Recent activity */}
       <Card padding="none">
         <div className="border-b border-slate-800 px-5 py-3">
-          <h3 className="text-sm font-semibold text-slate-200">
-            Action execution history
-          </h3>
+          <h3 className="text-sm font-semibold text-slate-200">Action execution history</h3>
           <p className="text-xs text-slate-500">
-            Last 50 response actions. The <span className="font-medium">Mode</span>{" "}
-            column always shows whether an action was simulated or lab-executed.
+            Last 50 response actions. The <span className="font-medium">Mode</span> column always
+            shows whether an action was simulated or lab-executed.
           </p>
         </div>
 
@@ -263,7 +321,7 @@ export default function ResponseCenterPage() {
         ) : recentQ.data?.length === 0 ? (
           <EmptyState title="No response activity yet" />
         ) : (
-          <Table>
+          <Table aria-label="Recent response actions">
             <Thead>
               <Tr>
                 <Th>#</Th>
@@ -273,7 +331,9 @@ export default function ResponseCenterPage() {
                 <Th>Status</Th>
                 <Th>Decided by</Th>
                 <Th>Executed</Th>
-                <Th></Th>
+                <Th>
+                  <span className="sr-only">Rollback</span>
+                </Th>
               </Tr>
             </Thead>
             <Tbody>
@@ -309,15 +369,7 @@ export default function ResponseCenterPage() {
                         size="sm"
                         variant="secondary"
                         disabled={rollback.isPending && rollback.variables === a.id}
-                        onClick={() => {
-                          if (
-                            window.confirm(
-                              `Roll back lab action #${a.id}? ${LAB_APPROVE_WARNING}`,
-                            )
-                          ) {
-                            rollback.mutate(a.id);
-                          }
-                        }}
+                        onClick={() => handleRollback(a)}
                       >
                         {rollback.isPending && rollback.variables === a.id && (
                           <Spinner className="h-3 w-3" />
@@ -344,8 +396,8 @@ interface PendingRowProps {
   action: ResponseActionOut;
   isApproving: boolean;
   isRejecting: boolean;
-  onApprove: (note?: string) => void;
-  onReject: (reason: string) => void;
+  onApprove: () => void;
+  onReject: () => void;
 }
 
 function PendingActionRow({
@@ -360,20 +412,6 @@ function PendingActionRow({
   const rationale =
     (action.payload?.rationale as string | undefined) ?? "No rationale provided.";
 
-  function handleApprove() {
-    if (!realLab) {
-      onApprove();
-      return;
-    }
-    // Real lab action: require an explicit typed reason as confirmation.
-    const reason = window.prompt(
-      `⚠ Real LAB action on ${String(action.payload?.target_ip ?? "the lab")}.\n` +
-        `${LAB_APPROVE_WARNING}\nType a reason to confirm:`,
-      "",
-    );
-    if (reason && reason.trim()) onApprove(reason.trim());
-  }
-
   // Strip rationale + low-signal fields so the payload block focuses on what
   // the analyst still hasn't seen.
   const extraPayload = useMemo(() => {
@@ -387,9 +425,7 @@ function PendingActionRow({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone="default">{action.action_type}</Badge>
-            <Badge tone={executionModeTone(action)}>
-              {executionModeLabel(action)}
-            </Badge>
+            <Badge tone={executionModeTone(action)}>{executionModeLabel(action)}</Badge>
             <Link
               to={`/alerts/${action.alert_id}`}
               className="font-mono text-xs text-emerald-400 hover:underline"
@@ -402,8 +438,8 @@ function PendingActionRow({
           </div>
           {realLab && (
             <p className="mt-2 rounded-md border border-rose-900/60 bg-rose-950/40 px-3 py-2 text-xs text-rose-300">
-              ⚠ {LAB_APPROVE_WARNING} Approving runs a real action against the
-              configured lab target and will require a typed reason.
+              ⚠ {LAB_APPROVE_WARNING} Approving runs a real action against the configured lab
+              target and will require typed confirmation + a reason.
             </p>
           )}
           <p className="mt-2 text-sm text-slate-300">{rationale}</p>
@@ -411,7 +447,8 @@ function PendingActionRow({
             <button
               type="button"
               onClick={() => setOpen((v) => !v)}
-              className="mt-2 text-xs text-slate-400 hover:text-slate-200"
+              aria-expanded={open}
+              className="mt-2 rounded text-xs text-slate-400 hover:text-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500"
             >
               {open ? "Hide payload" : "Show payload"}
             </button>
@@ -428,7 +465,7 @@ function PendingActionRow({
             variant={realLab ? "danger" : "primary"}
             size="sm"
             disabled={isApproving || isRejecting}
-            onClick={handleApprove}
+            onClick={onApprove}
           >
             {isApproving && <Spinner className="h-3 w-3" />}
             {realLab ? "Approve (LAB)" : "Approve"}
@@ -437,10 +474,7 @@ function PendingActionRow({
             variant="danger"
             size="sm"
             disabled={isApproving || isRejecting}
-            onClick={() => {
-              const reason = window.prompt("Reason for rejection?", "");
-              if (reason && reason.trim()) onReject(reason.trim());
-            }}
+            onClick={onReject}
           >
             {isRejecting && <Spinner className="h-3 w-3" />}
             Reject

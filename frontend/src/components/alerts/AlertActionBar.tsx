@@ -7,6 +7,7 @@ import { cn } from "@/lib/cn";
 import { alertsApi, investigationApi } from "@/lib/api";
 import { errorMessage } from "@/lib/api/errors";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { useToast } from "@/lib/toast/ToastContext";
 import type { AlertDetail, AlertDisposition } from "@/lib/types";
 
 const DISPOSITION_BUTTONS: Array<{
@@ -32,14 +33,28 @@ interface AlertActionBarProps {
 
 export function AlertActionBar({ alert }: AlertActionBarProps) {
   const qc = useQueryClient();
+  const toast = useToast();
   const { user } = useAuth();
   const analystId = user?.username;
 
+  const alertKey = ["alert", alert.id] as const;
+
   const invalidateAlert = () => {
-    qc.invalidateQueries({ queryKey: ["alert", alert.id] });
+    qc.invalidateQueries({ queryKey: alertKey });
     qc.invalidateQueries({ queryKey: ["alert", alert.id, "investigation"] });
     qc.invalidateQueries({ queryKey: ["alerts"] });
     qc.invalidateQueries({ queryKey: ["dashboard"] });
+  };
+
+  // Optimistically patch the cached AlertDetail; return a snapshot for rollback.
+  const optimisticPatch = async (patch: Partial<AlertDetail>) => {
+    await qc.cancelQueries({ queryKey: alertKey });
+    const prev = qc.getQueryData<AlertDetail>(alertKey);
+    if (prev) qc.setQueryData<AlertDetail>(alertKey, { ...prev, ...patch });
+    return { prev };
+  };
+  const rollback = (ctx: { prev?: AlertDetail } | undefined) => {
+    if (ctx?.prev) qc.setQueryData(alertKey, ctx.prev);
   };
 
   const dispositionMut = useMutation({
@@ -48,27 +63,49 @@ export function AlertActionBar({ alert }: AlertActionBarProps) {
         disposition: d,
         analyst_id: analystId,
       }),
-    onSuccess: invalidateAlert,
+    onMutate: (d) => {
+      // FALSE_POSITIVE / RESOLVED auto-close the alert server-side; mirror that.
+      const autoClose = d === "FALSE_POSITIVE" || d === "RESOLVED";
+      return optimisticPatch({ disposition: d, ...(autoClose ? { status: "CLOSED" } : {}) });
+    },
+    onError: (err, _d, ctx) => {
+      rollback(ctx);
+      toast.error(errorMessage(err, "Could not update disposition."));
+    },
+    onSuccess: (_data, d) => toast.success(`Disposition set to ${d.replace(/_/g, " ").toLowerCase()}.`),
+    onSettled: invalidateAlert,
   });
 
   const triageMut = useMutation({
     mutationFn: () => alertsApi.triageAlert(alert.id, {}),
-    onSuccess: invalidateAlert,
+    onError: (err) => toast.error(errorMessage(err, "Re-triage failed.")),
+    onSuccess: () => toast.success("Alert re-triaged."),
+    onSettled: invalidateAlert,
   });
 
   const investigateMut = useMutation({
     mutationFn: () => investigationApi.investigateAlert(alert.id, {}),
-    onSuccess: invalidateAlert,
+    onError: (err) => toast.error(errorMessage(err, "Investigation failed.")),
+    onSuccess: () => toast.success("Investigation complete."),
+    onSettled: invalidateAlert,
   });
 
   const reportMut = useMutation({
     mutationFn: () => alertsApi.generateAlertReport(alert.id),
-    onSuccess: invalidateAlert,
+    onError: (err) => toast.error(errorMessage(err, "Report generation failed.")),
+    onSuccess: () => toast.success("Report generated."),
+    onSettled: invalidateAlert,
   });
 
   const closeMut = useMutation({
     mutationFn: () => alertsApi.closeAlert(alert.id, { analyst_id: analystId }),
-    onSuccess: invalidateAlert,
+    onMutate: () => optimisticPatch({ status: "CLOSED" }),
+    onError: (err, _v, ctx) => {
+      rollback(ctx);
+      toast.error(errorMessage(err, "Could not close the alert."));
+    },
+    onSuccess: () => toast.success("Alert closed."),
+    onSettled: invalidateAlert,
   });
 
   const anyDispositionPending = dispositionMut.isPending;
@@ -163,23 +200,6 @@ export function AlertActionBar({ alert }: AlertActionBarProps) {
             </Button>
           </div>
         </div>
-
-        {(dispositionMut.error ||
-          triageMut.error ||
-          investigateMut.error ||
-          reportMut.error ||
-          closeMut.error) && (
-          <p className="text-xs text-rose-400">
-            {errorMessage(
-              dispositionMut.error ??
-                triageMut.error ??
-                investigateMut.error ??
-                reportMut.error ??
-                closeMut.error,
-              "Last action failed — see the network tab for details.",
-            )}
-          </p>
-        )}
       </div>
     </Card>
   );

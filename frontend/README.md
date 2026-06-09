@@ -150,6 +150,62 @@ Defined in [.env.example](.env.example); the same names are set by
   `severity`, `status`, `disposition`, `sort` from `useSearchParams`, so
   bookmarks and back-navigation work.
 
+## UX feedback, modals & error handling
+
+- **Toasts.** A global `ToastProvider` (`lib/toast/ToastContext.tsx`) exposes
+  `useToast()` with `success` / `error` / `info` / `warning`. Mutations surface
+  outcomes through it (login/logout, ingestion, detection, response
+  approve/reject/rollback, report + daily-summary generation, drift run, model
+  activate/rollback). Background refetches never toast, so the surface stays
+  quiet. The toast container is an `aria-live` region; errors/warnings render as
+  `role="alert"` (assertive), success/info as `role="status"` (polite).
+- **Accessible modals.** `components/ui/Modal.tsx` is a portalled dialog with a
+  focus trap, focus restoration, `Escape`-to-close (when dismissable), backdrop
+  dismissal, and `role="dialog"` + `aria-modal` + labelled/described ids.
+- **Promise-based confirmations.** `lib/confirm/ConfirmProvider.tsx` provides
+  `useConfirm()` — `await confirm({...})` resolves `{ confirmed, reason }`. It
+  replaces every `window.prompt`/`confirm`:
+  - **Reject** a response action → required reason.
+  - **Approve a real LAB action** → typed `CONFIRM` **and** a required reason.
+  - **Roll back** a lab action / **model rollback** / **model activate** →
+    confirmation dialog.
+- **ErrorBoundary.** `components/ErrorBoundary.tsx` wraps the whole app
+  (full-screen fallback) and each route (`RouteErrorBoundary`, inline fallback
+  that resets on navigation). It logs to the console and best-effort POSTs to
+  `POST /api/v1/telemetry/client-error`; the fallback offers **Reload** and
+  **Go to dashboard**.
+
+## Accessibility
+
+- Charts (`components/charts/*`) render an `aria-hidden` SVG plus a screen-reader
+  text summary in a `<figure>`/`<figcaption>` — no data is locked inside an
+  inaccessible canvas.
+- Sidebar nav is labelled (`<nav aria-label="Primary">`); a "Skip to main
+  content" link precedes it; `NavLink` sets `aria-current="page"`.
+- Forms connect errors via `aria-describedby` + `aria-invalid`; tables use
+  `scope="col"` headers and `aria-label`s; icon-only buttons have `aria-label`s.
+- Focus is always visible (`focus-visible:ring-*` on buttons, nav, dialogs).
+
+## Optimistic updates
+
+Approve/reject a response action, set an alert disposition, and close an alert
+update the cache immediately (TanStack Query `onMutate` with a snapshot), roll
+back on error, and re-sync to server truth in `onSettled`.
+
+## Testing
+
+```bash
+npm test          # vitest — unit + component + page render tests
+npm run typecheck # tsc --noEmit
+npm run test:e2e  # Playwright (needs the running stack — see e2e/README.md)
+```
+
+Unit/component/page tests live next to the code under `src/**` (a
+`renderWithProviders` helper in `src/test/utils.tsx` wraps Query/Router/Toast/
+Confirm/Auth). End-to-end specs live in `e2e/` (Playwright) and cover login →
+dashboard, ingest → detect → alerts, simulated approve, and the LAB approval
+modal gating.
+
 ## Demo flow end-to-end
 
 ```bash

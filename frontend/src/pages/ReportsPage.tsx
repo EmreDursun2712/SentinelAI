@@ -12,12 +12,15 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Spinner } from "@/components/ui/Spinner";
 import { alertsApi, reportsApi } from "@/lib/api";
+import { errorMessage } from "@/lib/api/errors";
+import { useToast } from "@/lib/toast/ToastContext";
 import { formatDateTime, formatRelative } from "@/lib/format";
 
 const ALREADY_REPORTED = new Set(["REPORTED", "CLOSED"]);
 
 export default function ReportsPage() {
   const qc = useQueryClient();
+  const toast = useToast();
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
   const listQ = useQuery({
@@ -44,7 +47,9 @@ export default function ReportsPage() {
     onSuccess: (out) => {
       qc.invalidateQueries({ queryKey: ["reports"] });
       setSelectedId(out.report_id);
+      toast.success("Daily summary generated.");
     },
+    onError: (err) => toast.error(errorMessage(err, "Could not generate the daily summary.")),
   });
 
   const generateForAlert = useMutation({
@@ -54,7 +59,9 @@ export default function ReportsPage() {
       qc.invalidateQueries({ queryKey: ["alerts"] });
       qc.invalidateQueries({ queryKey: ["alerts", "needs-report"] });
       setSelectedId(envelope.report_id);
+      toast.success("Report generated.");
     },
+    onError: (err) => toast.error(errorMessage(err, "Report generation failed.")),
   });
 
   const pendingAlerts = useMemo(
