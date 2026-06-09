@@ -63,10 +63,12 @@ The backend suite is split into two lanes that never block each other:
   is needed. `pyproject.toml` sets `addopts = ... -m 'not integration'`, so the
   integration lane is excluded automatically.
 - **Integration (`-m integration`).** Real PostgreSQL via
-  [testcontainers](https://testcontainers.com). These verify migrations,
-  CHECK/FK/unique constraints, JSONB, and the committing service transactions —
-  the guarantees only a real engine can prove. They live in
-  `backend/tests/integration/`.
+  [testcontainers](https://testcontainers.com). These verify migrations
+  (including a **`downgrade base` → `upgrade head` round-trip** and a single-step
+  `downgrade -1` cycle, so a broken `downgrade()` in any revision fails loudly),
+  CHECK/FK/unique constraints, JSONB, the committing service transactions, and the
+  model-lifecycle / retention / drift-feedback flows — the guarantees only a real
+  engine can prove. They live in `backend/tests/integration/`.
 
 ```bash
 # fast lane — what `make test-backend` and CI's `backend` job run

@@ -17,11 +17,13 @@ app/
 │   └── security.py    API-key + JWT helpers
 ├── api/
 │   ├── deps.py
-│   └── routers/       health, alerts, response, reports, ingest, stream
-├── agents/            the five agent modules (stubs until Phase 3+)
-├── ingestion/
-├── models/            SQLAlchemy ORM models (filled in Phase 1)
+│   └── routers/       auth, alerts, response, reports, ingest, detection,
+│                      dashboard, models, tasks, stream, telemetry, health
+├── agents/            the five agent modules + runtime (event dispatcher)
+├── ingestion/         CSV parser, feature schema, replayer
+├── models/            SQLAlchemy ORM models
 ├── schemas/           Pydantic DTOs
+├── tasks/             arq job cores
 └── services/          cross-module orchestration
 ```
 

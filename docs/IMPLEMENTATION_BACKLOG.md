@@ -146,7 +146,7 @@ sklearn is pinned `==1.9.0` in both `backend/pyproject.toml` and `ml/pyproject.t
 ### S. DevEx / docs 🟢
 - **New** `.pre-commit-config.yaml`: `ruff` (lint+format) for `backend`+`sensor`, `prettier`/`tsc` for `frontend`. Resolves the repo-wide ruff drift in one pass (`UP042`, formatting).
 - **`Makefile`**: add `e2e` (boot compose → smoke → teardown) and `backup`/`restore`.
-- **Docs/code fixes**: `PROJECT_ARCHITECTURE.md` still describes an `audit_log` table (actual: `agent_decisions`) — update the §4 entity. Keep `docs/QUALITY.md` test inventory counts current.
+- **Docs/code fixes (resolved)**: `PROJECT_ARCHITECTURE.md` §4 now documents the real entities (`agent_decisions` is the audit trail; there is no `audit_log`/`assets` table). Keep `docs/QUALITY.md` test inventory counts current.
 
 ---
 

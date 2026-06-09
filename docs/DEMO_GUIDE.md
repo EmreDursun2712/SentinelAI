@@ -20,10 +20,12 @@ make demo
 
 `make demo` is the safe path for a live demo. Under the hood it runs:
 
-1. **`make bootstrap`** — copies `.env`, brings up the three containers
-   (`postgres`, `backend`, `frontend`), waits for `/health`, trains the
-   detection model on 50k synthetic flows, and waits for the model to
-   register.
+1. **`make bootstrap`** — copies `.env`, brings up the services
+   (`postgres`, `redis`, `backend`, `worker`, `frontend`), waits for `/health`,
+   trains the detection model on 50k synthetic flows, and waits for the model to
+   register. It also creates the **bootstrap admin** from `.env`
+   (`BACKEND_BOOTSTRAP_ADMIN_USERNAME` / `BACKEND_BOOTSTRAP_ADMIN_PASSWORD`,
+   default `admin` / `change-me-admin-pw`).
 2. **`make demo-seed`** — replays the bundled 60-flow sample, runs
    detection, marks one alert `CONFIRMED` (with an investigation packet
    and a generated markdown report), marks a second `UNDER_REVIEW`,
@@ -40,7 +42,13 @@ Dashboard is now seeded. Open: http://localhost:5173
   · Response Center:                      /response
 ```
 
-Open **three browser tabs** before class:
+**Sign in first.** The dashboard requires authentication — open
+<http://localhost:5173>, and log in with the bootstrap admin (`admin` /
+the `BACKEND_BOOTSTRAP_ADMIN_PASSWORD` from your `.env`; default
+`change-me-admin-pw`). The session persists across reloads via an httpOnly
+refresh cookie, so you only sign in once.
+
+Open **three browser tabs** before class (sign in on tab 1; the cookie covers the rest):
 
 | Tab | URL                              | Why                                  |
 | --- | -------------------------------- | ------------------------------------ |
@@ -76,7 +84,7 @@ Open `/`.
 - **Highest-priority alerts** table, with priority scores.
 - **Model panel** — model name, version, threshold, feature count, class
   list. Proves the classifier is loaded and live.
-- **Top-bar pills** (Backend / Database) both emerald = healthy.
+- **Top-bar pills** (Backend / Database / Redis / Model / Live) emerald = healthy.
 
 > "One page that tells me the entire state of the SOC."
 
@@ -151,7 +159,7 @@ make shell-db <<< "INSERT INTO response_actions (alert_id, action_type, simulate
 ```
 
 → `ERROR: new row for relation "response_actions" violates check
-   constraint "ck_response_actions_simulated_only"`
+   constraint "ck_response_actions_simulated_unless_lab"`
 
 > "Even raw SQL with admin credentials cannot record an action that
 > claims it ran for real."
@@ -197,14 +205,21 @@ the system is fine and the failure was UI-side — refresh the browser.
 
 ### b. Bypass the UI entirely and curl the API
 
+The API requires auth, so grab an access token first (bootstrap admin):
+
 ```bash
-# Replay sample:
-curl -fsS -X POST -H 'Content-Type: application/json' \
+# 1. Log in → access token (use your .env BACKEND_BOOTSTRAP_ADMIN_PASSWORD)
+TOKEN=$(curl -fsS localhost:8000/api/v1/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"username":"admin","password":"change-me-admin-pw"}' | jq -r .access_token)
+
+# 2. Replay the sample (Bearer header):
+curl -fsS -X POST -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
   -d '{"file":"samples/sample_flows.csv","rate":50}' \
   http://localhost:8000/api/v1/ingest/replay | jq
 
-# Run detection:
-curl -fsS -X POST -H 'Content-Type: application/json' \
+# 3. Run detection:
+curl -fsS -X POST -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
   -d '{"limit":5000}' http://localhost:8000/api/v1/detection/run | jq
 ```
 
@@ -293,8 +308,9 @@ Or, if you only want to remove the demo state and keep the model + DB:
 
 ```bash
 docker compose exec postgres psql -U sentinelai -d sentinelai -c \
-    "TRUNCATE flow_events, alerts, response_actions, agent_decisions,
-              reports, investigation_packets, ingestion_jobs RESTART IDENTITY CASCADE;"
+    "TRUNCATE network_events, alerts, response_actions, agent_decisions,
+              alert_artifacts, incident_reports, ingestion_jobs, tasks
+     RESTART IDENTITY CASCADE;"
 make demo-seed
 ```
 

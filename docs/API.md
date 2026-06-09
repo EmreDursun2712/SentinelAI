@@ -9,9 +9,9 @@ The machine-readable schema is at `/api/v1/openapi.json`.
 - JSON in, JSON out. All bodies are UTF-8 JSON.
 - Every response carries an `X-Request-ID` header. If the client sends one, it is preserved.
 - **Every `/api/v1` endpoint requires authentication** (`Authorization: Bearer <access token>`),
-  except `POST /api/v1/auth/login` and `POST /api/v1/auth/refresh`. `/health`, `/readyz`,
-  `/metrics`, `/docs`, `/redoc`, and `/api/v1/openapi.json` stay public. See
-  [Authentication & roles](#authentication--roles).
+  except `POST /api/v1/auth/login`, `POST /api/v1/auth/refresh`, and
+  `POST /api/v1/telemetry/client-error`. `/health`, `/readyz`, `/metrics`, `/docs`, `/redoc`,
+  and `/api/v1/openapi.json` stay public. See [Authentication & roles](#authentication--roles).
 - **Cookie-authenticated mutations need CSRF.** Unsafe methods on a request carrying an auth
   cookie must send the readable `sentinelai_csrf` cookie back in an `X-CSRF-Token` header
   (double-submit). Bearer-header requests are exempt.
@@ -64,9 +64,10 @@ curl -fsS -b jar -c jar -X POST localhost:8000/api/v1/auth/refresh -H "X-CSRF-To
 
 Role policy by endpoint family:
 
-| Family                                                       | Read (GET) | Mutate (POST) |
-| ------------------------------------------------------------ | ---------- | ------------- |
-| alerts, response, reports, ingestion, detection, dashboard  | VIEWER+    | ANALYST+      |
+| Family                                                              | Read (GET) | Mutate (POST) |
+| ------------------------------------------------------------------- | ---------- | ------------- |
+| alerts, response, reports, ingestion, detection, dashboard, tasks   | VIEWER+    | ANALYST+      |
+| models (lifecycle)                                                  | VIEWER+    | ANALYST+ (activate/rollback: **ADMIN**) |
 
 A `VIEWER` calling a mutation gets **403**; a request with no/invalid token gets **401**.
 
@@ -174,7 +175,7 @@ returns a `Task` (id + status); `GET /api/v1/tasks` / `GET /api/v1/tasks/{id}`
 report status (owner-scoped; ADMIN sees all), and `task.updated` events stream
 live. Full surface, kinds, and config: [TASK_QUEUE.md](TASK_QUEUE.md).
 
-## Endpoints (Phase 0 scaffolding — full behavior lands in later phases)
+## Endpoints
 
 | Method | Path                                  | Purpose                                       |
 | ------ | ------------------------------------- | --------------------------------------------- |
@@ -217,9 +218,18 @@ only possible in explicit, gated LAB mode.
 | POST   | `/api/v1/detection/events/{id}`       | Detect a stored event; persists alert         |
 | POST   | `/api/v1/detection/batch`             | Detect a list of event_ids; persists          |
 | POST   | `/api/v1/detection/run`               | Process recent un-detected events             |
-| GET    | `/api/v1/detection/drift/latest`      | Latest model-drift snapshot. See [MODEL_DRIFT.md](MODEL_DRIFT.md) |
+| GET    | `/api/v1/detection/drift/latest`      | Latest model-drift snapshot (incl. analyst-feedback quality proxy). See [MODEL_DRIFT.md](MODEL_DRIFT.md) |
 | GET    | `/api/v1/detection/drift/history`     | Recent drift snapshots (`?limit=`)            |
 | POST   | `/api/v1/detection/drift/run`         | Compute + persist a drift snapshot (ANALYST+) |
+| GET    | `/api/v1/models`                      | List registered model versions (+ active id). See [MODEL_LIFECYCLE.md](MODEL_LIFECYCLE.md) |
+| GET    | `/api/v1/models/activations`          | Activation/rollback audit history             |
+| GET    | `/api/v1/models/shadow`               | Recent shadow evaluations                     |
+| POST   | `/api/v1/models/{id}/activate`        | Activate a version (**ADMIN**); audited       |
+| POST   | `/api/v1/models/rollback`             | Roll back to the previously active version (**ADMIN**) |
+| POST   | `/api/v1/models/shadow`               | Shadow-eval a candidate vs the active model (ANALYST+) |
+| POST   | `/api/v1/tasks/{kind}`                | Enqueue a background job → `Task` id. See [TASK_QUEUE.md](TASK_QUEUE.md) |
+| GET    | `/api/v1/tasks`, `/api/v1/tasks/{id}` | List / fetch background tasks (owner-scoped; ADMIN sees all) |
+| POST   | `/api/v1/telemetry/client-error`      | Public, rate-limited frontend ErrorBoundary report (204) |
 | WS     | `/api/v1/stream`                      | Authenticated live event stream (see below)   |
 
 See [INGESTION.md](INGESTION.md) for the CSV schema, [DETECTION.md](DETECTION.md) for the inference flow, [TRIAGE.md](TRIAGE.md) for severity/priority rules and analyst dispositions, [RESPONSE.md](RESPONSE.md) for recommendation policy and the approval flow, [INVESTIGATION.md](INVESTIGATION.md) for evidence gathering and the summary packet, and [REPORTING.md](REPORTING.md) for incident-report generation and daily summaries.

@@ -173,9 +173,9 @@ Click **Generate daily summary** in the page header — a `DAILY_SUMMARY`
 report appears and auto-selects.
 
 > **Say out loud:** "The report is structured JSON underneath — what you see
-> rendered here is also exactly what the backend's `summary` JSONB column
-> stores. It can be downloaded as markdown, copy-pasted into Slack, or
-> rendered to PDF by `pandoc` in CI."
+> rendered here is exactly what the backend's `packet` JSONB column stores. It
+> can be downloaded as markdown, copy-pasted into Slack, or converted to PDF
+> with `pandoc` if a print version is needed."
 
 ---
 
@@ -205,7 +205,7 @@ docker compose exec postgres psql -U sentinelai -d sentinelai -c "
   VALUES (1, 'BLOCK_IP', FALSE);
 "
 # → ERROR: new row for relation "response_actions" violates check
-#          constraint "ck_response_actions_simulated_only"
+#          constraint "ck_response_actions_simulated_unless_lab"
 ```
 
 > **Say out loud:** "Even with raw SQL, the database refuses to record an

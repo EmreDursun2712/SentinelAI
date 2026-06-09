@@ -4,7 +4,9 @@ AI-driven intrusion detection and response dashboard. Third-year Computer and Ne
 
 A FastAPI backend, a React + TypeScript dashboard, a scikit-learn ML pipeline trained on CIC-IDS2017, and a five-agent workflow (Detect → Triage → Respond → Investigate → Report) — all wired together through PostgreSQL and Docker Compose. Response actions are **simulated only**; the system never touches a real firewall, host, or third-party service.
 
-See [PROJECT_ARCHITECTURE.md](PROJECT_ARCHITECTURE.md) for the full design and [docs/QUALITY.md](docs/QUALITY.md) for the test inventory and pre-demo checklist.
+See [PROJECT_ARCHITECTURE.md](PROJECT_ARCHITECTURE.md) for the full design,
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the deployment runbook, and
+[docs/QUALITY.md](docs/QUALITY.md) for the test inventory and pre-demo checklist.
 
 ---
 
@@ -45,7 +47,8 @@ make bootstrap
 That single target:
 
 1. Copies `.env.example` → `.env` if no `.env` exists.
-2. Builds and starts all three containers (`docker compose up -d --build`).
+2. Builds and starts all services — `postgres`, `redis`, `backend`, `worker`,
+   `frontend` (`docker compose up -d --build`).
 3. Waits for `backend /health` to respond.
 4. If no model is staged at `ml/artifacts/latest/`, creates `ml/.venv`,
    trains a synthetic 50k-row model, and writes the artifacts.
@@ -165,7 +168,7 @@ detail in [docs/QUALITY.md](docs/QUALITY.md#3-continuous-integration-pre-commit-
 | Workflow      | Checks                                                         |
 | ------------- | ------------------------------------------------------------- |
 | `backend`     | `ruff check` · `ruff format --check` · `pytest` (backend + sensor) + integration (real Postgres) |
-| `frontend`    | `npm run typecheck` · `npm test`                              |
+| `frontend`    | `npm run typecheck` · `npm test` · `npm run build` + advisory Playwright e2e (full compose stack) |
 | `security`    | `pip-audit` · `npm audit --audit-level=high` · CycloneDX SBOM |
 | `e2e`         | `make e2e` (manual / weekly)                                  |
 
@@ -229,6 +232,26 @@ BACKEND_BOOTSTRAP_ADMIN_PASSWORD=<a-strong-password>
 Then open <http://localhost:5173>, sign in, and operate the dashboard. Admins get
 a **Users** page to create accounts (with live password-policy feedback). Full
 flow, cookie / SameSite / CSRF behavior, and curl examples: [docs/AUTH.md](docs/AUTH.md).
+
+## Security defaults
+
+The shipped configuration is **safe by default** — a fresh clone cannot capture
+packets, touch a real firewall, or expose itself:
+
+| Default | Behavior |
+| --- | --- |
+| **Response = simulated** | Real (non-simulated) actions are *structurally impossible* outside LAB mode (Postgres CHECK). LAB is **off**. |
+| **Lab response = off** | Needs `RESPONSE_ENABLED=true` + `MODE=lab` + a lab executor + allowlisted CIDRs + analyst approval; every effect is reversible. |
+| **Live sensor = off** | Needs `SENSOR_ENABLED=true` + authorized CIDRs; reads flow **metadata only** (no NIC, no payloads). |
+| **Data retention = off** | All `RETENTION_*_DAYS` default `0` (nothing deleted). Dry-run first. |
+| **Auth = required** | Every `/api/v1` route needs auth (except login/refresh/telemetry/health/docs); RBAC `VIEWER < ANALYST < ADMIN`. |
+| **Secrets fail closed** | The backend refuses to start in a production-like `SENTINEL_ENV` with the default JWT secret, or with `SameSite=None` cookies that aren't `Secure`. |
+| **No default user** | An admin is created only when both bootstrap env vars are set; nothing is hardcoded. |
+| **Redis required in prod** | Rate limiting, WebSocket fan-out, and the task queue all require Redis in production (fail closed). |
+
+Rotate `BACKEND_API_KEY`, `BACKEND_JWT_SECRET`, and the bootstrap admin password
+(all `change-me` placeholders) before any exposed deployment. Full posture:
+[docs/DEPLOYMENT_SECURITY.md](docs/DEPLOYMENT_SECURITY.md) · [docs/ETHICS.md](docs/ETHICS.md).
 
 ## Security hardening
 

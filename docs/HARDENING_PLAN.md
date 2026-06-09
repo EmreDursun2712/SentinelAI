@@ -242,6 +242,6 @@ Blockers / risks:
   add DB-bound logic — keep pure unit tests for rule/math layers; integration tests need a
   Postgres (or aiosqlite) test DB, which is itself net-new work.
 - **Secrets:** `jwt_secret` / `api_key` still ship as `change-me`. Etap 1 should fail-fast on defaults outside dev.
-- **Doc drift:** `docs/ETHICS.md` references an `audit_log` table that does not exist (code uses
-  `agent_decisions`). Reconcile while editing ETHICS in etaps 5–6.
+- **Doc drift (resolved):** `docs/ETHICS.md` previously referenced a non-existent `audit_log`
+  table; it now correctly documents `agent_decisions` (the actual audit trail).
 - **Etaps 5 & 6 require ETHICS rewrites** and instructor sign-off; they contradict current hard rules by design.

@@ -40,8 +40,11 @@ or alter infrastructure outside its own container network.
 
 ## Auditability
 
-Every state transition (agent step or analyst action) is appended to the `audit_log` table.
-Logs are JSON-formatted for downstream review.
+Every state transition — each agent step **and** every analyst action — is appended to the
+`agent_decisions` table (the `agent` value is `ANALYST` for human actions), with `decision` and
+`reasoning` stored as JSONB. Model activations/rollbacks are separately recorded in
+`model_activations`. Application logs are JSON-formatted (structlog) and carry a per-request id
+plus the authenticated user/role for downstream review; secrets and tokens are never logged.
 
 ## If you find yourself wanting to add a real-action driver
 

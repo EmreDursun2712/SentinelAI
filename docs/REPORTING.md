@@ -182,10 +182,11 @@ docker compose exec postgres psql -U sentinelai -d sentinelai -c "
 - **Append-only history.** Calling `/report` twice creates two reports.
   `GET /alerts/{id}/report` returns the most recent. Useful for "regenerate
   after rule update" without erasing the previous version.
-- **Markdown over PDF.** WeasyPrint (the architecture's original PDF
-  candidate) adds C deps for a feature only the final demo needs. Markdown
-  is renderable in any browser and copy-pastes into Slack/Confluence cleanly;
-  PDF can be a one-line `pandoc` post-step on the operator's side.
+- **Markdown over PDF.** An HTML→PDF renderer (e.g. WeasyPrint) was considered
+  but adds C deps for a feature only the final demo needs, so reports are
+  **markdown only** (`pdf_path` is reserved/nullable, never populated). Markdown
+  renders in any browser and copy-pastes into Slack/Confluence cleanly; PDF can be
+  a one-line `pandoc` post-step on the operator's side.
 - **Determinism check in tests.** `test_alert_markdown_is_deterministic`
   renders the same packet twice and asserts byte-equal output.
 - **Table-safe escaping.** All cell values go through `_md_cell` which
