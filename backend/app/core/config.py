@@ -91,6 +91,13 @@ class Settings(BaseSettings):
     # Detection
     detection_threshold: float = 0.5
     detection_benign_label: str = "BENIGN"
+    # Feature coverage guardrails. "Coverage" is the share of the model's trained
+    # features actually present (finite) in an inference batch. Below `warn` we log
+    # a warning (the model's own `expected_feature_coverage` metadata takes
+    # precedence when present). `min` > 0 turns it into a hard failure (400);
+    # 0 (default) disables the hard fail so detection degrades gracefully.
+    detection_feature_coverage_warn: float = 0.5
+    detection_feature_coverage_min: float = 0.0
     # When true, the batch ingest endpoint runs detection on freshly-queued
     # events right after insert (bounded). Off by default — opt-in for demos.
     detection_auto_run_on_ingest: bool = False

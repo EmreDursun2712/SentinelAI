@@ -14,11 +14,12 @@ import * as detectionApi from "./detection";
 import * as healthApi from "./health";
 import * as ingestionApi from "./ingestion";
 import * as investigationApi from "./investigation";
+import * as modelsApi from "./models";
 import * as reportsApi from "./reports";
 import * as responseApi from "./response";
 import * as tasksApi from "./tasks";
 
-export { alertsApi, authApi, dashboardApi, detectionApi, healthApi, ingestionApi, investigationApi, reportsApi, responseApi, tasksApi };
+export { alertsApi, authApi, dashboardApi, detectionApi, healthApi, ingestionApi, investigationApi, modelsApi, reportsApi, responseApi, tasksApi };
 
 // Convenience re-exports.
 export { health, readyz } from "./health";

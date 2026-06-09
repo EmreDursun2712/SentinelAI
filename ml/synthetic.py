@@ -41,6 +41,36 @@ FEATURES: Final[tuple[str, ...]] = (
 )
 
 
+# CIC-IDS2017-style display headers for each canonical feature. The backend
+# ingestor's ``normalize_column`` maps these back to the snake_case keys above,
+# so a CSV written with these headers aligns exactly with a model's
+# ``feature_order``. Used to generate the bundled sample CSV; the round-trip
+# (display header → normalized key → FEATURES) is asserted in the ML tests.
+FEATURE_DISPLAY_NAMES: Final[dict[str, str]] = {
+    "flow_duration": "Flow Duration",
+    "total_fwd_packets": "Total Fwd Packets",
+    "total_backward_packets": "Total Backward Packets",
+    "total_length_of_fwd_packets": "Total Length of Fwd Packets",
+    "total_length_of_bwd_packets": "Total Length of Bwd Packets",
+    "fwd_packet_length_mean": "Fwd Packet Length Mean",
+    "bwd_packet_length_mean": "Bwd Packet Length Mean",
+    "flow_bytes/s": "Flow Bytes/s",
+    "flow_packets/s": "Flow Packets/s",
+    "flow_iat_mean": "Flow IAT Mean",
+    "flow_iat_std": "Flow IAT Std",
+    "fwd_iat_mean": "Fwd IAT Mean",
+    "bwd_iat_mean": "Bwd IAT Mean",
+    "packet_length_mean": "Packet Length Mean",
+    "packet_length_std": "Packet Length Std",
+    "fin_flag_count": "FIN Flag Count",
+    "syn_flag_count": "SYN Flag Count",
+    "rst_flag_count": "RST Flag Count",
+    "psh_flag_count": "PSH Flag Count",
+    "ack_flag_count": "ACK Flag Count",
+    "average_packet_size": "Average Packet Size",
+}
+
+
 # Per-class center vectors (in feature order). Real CIC-IDS2017 values are far
 # more spread out than these, but the relative magnitudes are representative.
 CLASS_CENTERS: Final[dict[str, np.ndarray]] = {
@@ -196,14 +226,68 @@ def generate(
     return df.sample(frac=1.0, random_state=random_state).reset_index(drop=True)
 
 
+def generate_sample(n_rows: int = 60, *, random_state: int = 7) -> pd.DataFrame:
+    """Return a small, demo-friendly frame with the full feature set + metadata.
+
+    Unlike :func:`generate` (snake_case feature columns only, for training), this
+    produces a realistic flow CSV: CIC-IDS2017-style display headers for **every**
+    canonical feature, plus the network-identity columns the ingestor expects
+    (timestamp / IPs / ports / protocol) and a ``Label``. Because it carries all
+    of :data:`FEATURES`, a model trained on synthetic data gets 100% feature
+    coverage when this sample is ingested — closing the train/serve gap.
+    """
+    if n_rows <= 0:
+        raise ValueError("n_rows must be positive")
+    rng = np.random.default_rng(random_state)
+    base = generate(n_rows, random_state=random_state, nan_rate=0.0, inf_rate=0.0)
+    base = base.head(n_rows).reset_index(drop=True)
+
+    protocols = {"BENIGN": 6, "DDoS": 6, "BruteForce": 6, "PortScan": 6}
+    dst_ports = {
+        "BENIGN": [443, 80, 53],
+        "DDoS": [80, 443],
+        "BruteForce": [22, 21],
+        "PortScan": [0],
+    }
+    base_ts = np.datetime64("2024-01-15T08:00:00")
+
+    rows: list[dict[str, object]] = []
+    for i, row in base.iterrows():
+        label = str(row["label"])
+        rows.append(
+            {
+                "Timestamp": str(base_ts + np.timedelta64(int(i) * 4, "s")),
+                "Source IP": f"192.168.1.{50 + int(i) % 200}",
+                "Source Port": int(rng.integers(1024, 65535)),
+                "Destination IP": "10.0.0.10" if label != "PortScan" else "10.0.0.20",
+                "Destination Port": int(rng.choice(dst_ports[label])),
+                "Protocol": protocols[label],
+                **{FEATURE_DISPLAY_NAMES[f]: round(float(row[f]), 2) for f in FEATURES},
+                "Label": label,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def _cli() -> None:
     parser = argparse.ArgumentParser(description="Generate synthetic CIC-IDS2017-like flows.")
     parser.add_argument("--rows", type=int, default=50_000)
     parser.add_argument("--random-state", type=int, default=42)
     parser.add_argument("--output", type=Path, required=True, help="Output CSV path.")
+    parser.add_argument(
+        "--sample",
+        action="store_true",
+        help="Write a small demo CSV (all features + metadata columns) instead of the "
+        "training frame. Used to regenerate backend/data/samples/sample_flows.csv.",
+    )
     args = parser.parse_args()
 
-    df = generate(args.rows, random_state=args.random_state)
+    if args.sample:
+        df = generate_sample(
+            args.rows if args.rows != 50_000 else 60, random_state=args.random_state
+        )
+    else:
+        df = generate(args.rows, random_state=args.random_state)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(args.output, index=False)
     print(f"Wrote {len(df)} rows to {args.output}")

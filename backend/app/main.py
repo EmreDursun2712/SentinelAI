@@ -20,6 +20,7 @@ from app.api.routers import (
     detection,
     health,
     ingest,
+    models,
     reports,
     response,
     stream,
@@ -339,6 +340,7 @@ def create_app() -> FastAPI:
     app.include_router(
         dashboard.router, prefix=API_V1_PREFIX, tags=["dashboard"], dependencies=protected
     )
+    app.include_router(models.router, prefix=API_V1_PREFIX, tags=["models"], dependencies=protected)
     app.include_router(tasks.router, prefix=API_V1_PREFIX, tags=["tasks"], dependencies=protected)
     # NOTE: the WebSocket /stream is an echo stub today and is secured in the
     # WebSocket-broadcasting etap (token via query param). It carries no data.

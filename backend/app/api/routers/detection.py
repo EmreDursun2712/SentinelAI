@@ -40,6 +40,7 @@ from app.schemas.detection import (
 from app.services import drift_service
 from app.services.detection_service import (
     Prediction,
+    assess_feature_coverage,
     detect_events,
     fetch_undetected_events,
     predict_flows,
@@ -47,6 +48,29 @@ from app.services.detection_service import (
 from app.services.model_registry import ModelBundle, get_model_registry
 
 router = APIRouter(prefix="/detection")
+
+
+def _enforce_feature_coverage(bundle: ModelBundle, feature_dicts: list[dict]) -> dict:
+    """Assess coverage; raise 400 when below the configured hard minimum.
+
+    Returns the coverage report so callers can surface it. The warning path is
+    handled inside the detection service; this only adds the optional hard fail
+    (``SENTINEL_DETECTION_FEATURE_COVERAGE_MIN`` > 0).
+    """
+    report = assess_feature_coverage(feature_dicts, bundle.feature_order)
+    minimum = get_settings().detection_feature_coverage_min
+    if minimum > 0 and report["coverage"] < minimum:
+        raise AppError(
+            "Inference input is missing too many trained features.",
+            details={
+                "coverage": report["coverage"],
+                "minimum": minimum,
+                "n_present": report["n_present"],
+                "n_expected": report["n_expected"],
+                "missing": report["missing"][:50],
+            },
+        )
+    return report
 
 
 def _drift_report(result: drift_service.DriftRunResult) -> DriftReport:
@@ -137,6 +161,8 @@ async def model_info(session: SessionDep) -> ModelInfoOut:
         is_active=is_active,
         threshold=settings.detection_threshold,
         benign_label=settings.detection_benign_label,
+        expected_feature_coverage=bundle.metadata.get("expected_feature_coverage"),
+        calibrated=bool((bundle.metadata.get("calibration") or {}).get("calibrated", False)),
     )
 
 
@@ -148,6 +174,7 @@ async def model_info(session: SessionDep) -> ModelInfoOut:
 async def predict(request: PredictRequest) -> list[PredictionOut]:
     bundle = _require_bundle()
     settings = get_settings()
+    _enforce_feature_coverage(bundle, [f.features for f in request.flows])
     predictions = predict_flows(
         bundle,
         request.flows,
@@ -233,8 +260,10 @@ async def run_recent(session: SessionDep, request: RunRequest) -> RunSummary:
             by_label={},
             model_name=bundle.name,
             model_version=bundle.version,
+            feature_coverage=None,
         )
 
+    coverage = _enforce_feature_coverage(bundle, [dict(ev.features or {}) for ev in events])
     predictions = await detect_events(
         session,
         bundle,
@@ -251,6 +280,7 @@ async def run_recent(session: SessionDep, request: RunRequest) -> RunSummary:
         by_label=dict(by_label),
         model_name=bundle.name,
         model_version=bundle.version,
+        feature_coverage=coverage["coverage"],
     )
 
 

@@ -105,6 +105,36 @@ export function ModelHealthPanel() {
               />
             </div>
 
+            {snapshot.feedback && "total" in snapshot.feedback && snapshot.feedback.total > 0 && (
+              <div className="rounded-md border border-slate-800 bg-slate-900/40 p-3">
+                <p className="mb-2 text-[10px] uppercase tracking-widest text-slate-500">
+                  Analyst feedback (model quality proxy)
+                </p>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <Stat
+                    label="Quality"
+                    value={
+                      snapshot.feedback.quality_score !== null
+                        ? `${(snapshot.feedback.quality_score * 100).toFixed(0)}%`
+                        : "—"
+                    }
+                  />
+                  <Stat
+                    label="False positive"
+                    value={`${(snapshot.feedback.false_positive_rate * 100).toFixed(0)}%`}
+                  />
+                  <Stat
+                    label="Confirmed"
+                    value={`${(snapshot.feedback.confirmed_rate * 100).toFixed(0)}%`}
+                  />
+                  <Stat
+                    label="Unresolved"
+                    value={`${(snapshot.feedback.unresolved_rate * 100).toFixed(0)}%`}
+                  />
+                </div>
+              </div>
+            )}
+
             {topDriftingFeatures(snapshot).length > 0 && (
               <div>
                 <p className="mb-1.5 text-[10px] uppercase tracking-widest text-slate-500">

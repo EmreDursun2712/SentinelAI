@@ -273,6 +273,19 @@ export default function DashboardPage() {
                 value={modelQ.data.threshold?.toFixed(2) ?? "—"}
                 mono
               />
+              <ModelRow
+                label="Calibrated"
+                value={modelQ.data.calibrated ? "yes" : "no"}
+              />
+              <ModelRow
+                label="Expected coverage"
+                value={
+                  modelQ.data.expected_feature_coverage != null
+                    ? `${(modelQ.data.expected_feature_coverage * 100).toFixed(0)}%`
+                    : "—"
+                }
+                mono
+              />
               <div className="border-t border-slate-800 pt-2">
                 <p className="text-slate-400">Classes</p>
                 <p className="mt-1 font-mono text-slate-300">

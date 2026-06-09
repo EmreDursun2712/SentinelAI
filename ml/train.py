@@ -27,10 +27,13 @@ from sklearn.preprocessing import LabelEncoder
 from ml import __version__
 from ml.artifacts import make_version, save_artifacts, update_latest
 from ml.baseline import compute_baseline
+from ml.calibration import calibration_report, calibrate_pipeline
 from ml.data_loader import load_path
+from ml.hpo import run_search
 from ml.metrics import compute_metrics, confusion_matrix_json
 from ml.pipeline import build_pipeline
 from ml.preprocess import build_xy, clean_frame
+from ml.profiles import get_profile
 from ml.synthetic import generate as generate_synthetic
 
 if TYPE_CHECKING:
@@ -64,6 +67,43 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="random_forest",
     )
     parser.add_argument("--name", default="sentinelai-detection", help="Model name.")
+    parser.add_argument(
+        "--profile",
+        choices=("auto", "synthetic", "cic2017"),
+        default="auto",
+        help="Dataset profile — controls label normalization (see ml/profiles.py). "
+        "Use 'cic2017' with real CIC-IDS2017 data.",
+    )
+    parser.add_argument(
+        "--search",
+        choices=("none", "random", "grid"),
+        default="none",
+        help="Hyperparameter search mode. Default 'none' keeps training fast.",
+    )
+    parser.add_argument(
+        "--search-iter",
+        type=int,
+        default=20,
+        help="Candidates to sample for --search random.",
+    )
+    parser.add_argument("--search-cv", type=int, default=3, help="CV folds for the HPO search.")
+    parser.add_argument(
+        "--calibrate",
+        choices=("none", "sigmoid", "isotonic"),
+        default="none",
+        help="Probability calibration. When set, the served confidence (and the "
+        "alert threshold decision) uses calibrated probabilities.",
+    )
+    parser.add_argument(
+        "--calibrate-cv", type=int, default=3, help="CV folds for probability calibration."
+    )
+    parser.add_argument(
+        "--min-feature-coverage",
+        type=float,
+        default=0.8,
+        help="Expected fraction of trained features present at inference time, "
+        "recorded in metadata so the backend can warn on under-covered input.",
+    )
     parser.add_argument("--test-size", type=float, default=0.15)
     parser.add_argument("--val-size", type=float, default=0.15)
     parser.add_argument(
@@ -132,6 +172,13 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("Input data is missing a 'label' column.")
         return 2
 
+    # Normalize labels per the dataset profile (e.g. fold CIC-IDS2017 attack
+    # sub-labels into coarse families), then drop rows that map to empty.
+    profile = get_profile(args.profile)
+    df["label"] = df["label"].astype(str).map(profile.normalize_label)
+    df = df[df["label"] != ""].reset_index(drop=True)
+    logger.info("Applied '%s' label profile; rows: %d", profile.name, len(df))
+
     X, y_str = build_xy(df)
     feature_order = list(X.columns)
     logger.info("Using %d features", len(feature_order))
@@ -170,11 +217,53 @@ def main(argv: list[str] | None = None) -> int:
         random_state=args.random_state,
         n_estimators=args.n_estimators,
     )
-    logger.info("Fitting %s ...", args.algorithm)
-    pipeline.fit(X_train, y_train)
+
+    # Optional hyperparameter search (fits internally, returns the best fitted
+    # pipeline). Default is "none" so normal training stays fast.
+    if args.search != "none":
+        logger.info("Running %s hyperparameter search ...", args.search)
+        pipeline, hpo_record = run_search(
+            pipeline,
+            X_train,
+            y_train,
+            algorithm=args.algorithm,
+            mode=args.search,
+            n_iter=args.search_iter,
+            cv=args.search_cv,
+            random_state=args.random_state,
+        )
+        logger.info(
+            "HPO best macro-F1=%.4f params=%s",
+            hpo_record.get("best_score", float("nan")),
+            hpo_record.get("best_params"),
+        )
+    else:
+        hpo_record = {"mode": "none"}
+        logger.info("Fitting %s ...", args.algorithm)
+        pipeline.fit(X_train, y_train)
+
+    # Optional probability calibration. CalibratedClassifierCV re-fits a clone of
+    # the (best) pipeline with internal CV, so the served predict_proba — and the
+    # alert threshold decision that reads it — is calibrated.
+    if args.calibrate != "none":
+        logger.info("Calibrating probabilities (%s) ...", args.calibrate)
+        pipeline = calibrate_pipeline(
+            pipeline, X_train, y_train, method=args.calibrate, cv=args.calibrate_cv
+        )
 
     val_pred = pipeline.predict(X_val)
     test_pred = pipeline.predict(X_test)
+
+    # Calibration diagnostics are computed even when calibration is off, giving a
+    # baseline Brier score + reliability curve (calibrated=False) to compare against.
+    calibration = calibration_report(
+        y_val, pipeline.predict_proba(X_val), classes, method=args.calibrate
+    )
+    logger.info(
+        "Validation Brier=%.4f (calibrated=%s)",
+        calibration["brier_score"],
+        calibration["calibrated"],
+    )
 
     val_metrics = compute_metrics(y_val, val_pred, classes)
     test_metrics = compute_metrics(y_test, test_pred, classes)
@@ -209,6 +298,19 @@ def main(argv: list[str] | None = None) -> int:
         "source": source,
         "random_state": args.random_state,
         "n_estimators": args.n_estimators,
+        "profile": profile.name,
+        # Expected share of trained features present at inference time. The
+        # backend warns when an inference batch falls below this (see
+        # detection_service.assess_feature_coverage).
+        "expected_feature_coverage": args.min_feature_coverage,
+        "feature_coverage": {
+            "n_features": len(feature_order),
+            "expected": args.min_feature_coverage,
+        },
+        # Hyperparameter search record ({"mode": "none"} when not run).
+        "hpo": hpo_record,
+        # Calibration method + Brier score + reliability curve.
+        "calibration": calibration,
         "training_params": {
             "test_size": args.test_size,
             "val_size": args.val_size,

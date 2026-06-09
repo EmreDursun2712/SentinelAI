@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { RefreshIcon } from "@/components/icons";
+import { ModelVersionsPanel } from "@/components/models/ModelVersionsPanel";
 import { TasksPanel } from "@/components/tasks/TasksPanel";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -122,6 +123,10 @@ export default function SystemPage() {
                 model?.name ? `${model.name} @ ${model.version ?? "?"}` : "no model staged"
               }
             />
+          </div>
+
+          <div className="mt-4">
+            <ModelVersionsPanel />
           </div>
 
           <div className="mt-4">

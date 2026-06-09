@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.enums import DriftStatus
 from app.schemas.ingestion import FlowRecordIn
@@ -41,6 +41,9 @@ class RunSummary(BaseModel):
     by_label: dict[str, int]
     model_name: str
     model_version: str
+    # Share of the model's trained features present in the processed batch
+    # (1.0 = full coverage). Low values flag a train/serve feature mismatch.
+    feature_coverage: float | None = None
 
 
 class ModelInfoOut(BaseModel):
@@ -57,6 +60,10 @@ class ModelInfoOut(BaseModel):
     is_active: bool | None = None
     threshold: float | None = None
     benign_label: str | None = None
+    # Declared at train time: the share of trained features the model expects to
+    # see at inference. Surfaced on the dashboard model panel.
+    expected_feature_coverage: float | None = None
+    calibrated: bool | None = None
 
     model_config = ConfigDict(from_attributes=False)
 
@@ -77,11 +84,18 @@ class DriftSnapshotOut(BaseModel):
     feature_drift: dict[str, Any]
     prediction_distribution: dict[str, Any]
     confidence_stats: dict[str, Any]
+    feedback: dict[str, Any] = Field(default_factory=dict)
     drift_score: float | None
     status: DriftStatus
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("feedback", mode="before")
+    @classmethod
+    def _feedback_default(cls, value: Any) -> dict[str, Any]:
+        # Snapshots predating feedback tracking (or not yet flushed) carry NULL.
+        return value or {}
 
 
 class DriftReport(BaseModel):

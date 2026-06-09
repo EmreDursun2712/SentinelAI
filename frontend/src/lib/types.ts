@@ -42,6 +42,17 @@ export interface DriftConfidenceStats {
   p95: number | null;
 }
 
+export interface DriftFeedback {
+  total: number;
+  counts: Record<string, number>;
+  false_positive_rate: number;
+  confirmed_rate: number;
+  resolved_rate: number;
+  unresolved_rate: number;
+  verdict_count: number;
+  quality_score: number | null;
+}
+
 export interface DriftSnapshot {
   id: number;
   model_version_id: number | null;
@@ -51,6 +62,7 @@ export interface DriftSnapshot {
   feature_drift: Record<string, DriftFeature>;
   prediction_distribution: Record<string, unknown>;
   confidence_stats: DriftConfidenceStats;
+  feedback: DriftFeedback | Record<string, never>;
   drift_score: number | null;
   status: DriftStatus;
   created_at: string;
@@ -264,6 +276,62 @@ export interface ModelInfo {
   is_active?: boolean | null;
   threshold?: number | null;
   benign_label?: string | null;
+  expected_feature_coverage?: number | null;
+  calibrated?: boolean | null;
+}
+
+// ----- Model registry / lifecycle -----------------------------------------
+
+export interface ModelVersion {
+  id: number;
+  name: string;
+  version: string;
+  algorithm: string;
+  classes: string[];
+  feature_order: string[];
+  metrics: Record<string, number>;
+  artifact_path: string;
+  is_active: boolean;
+  trained_at: string | null;
+  created_at: string;
+}
+
+export interface ModelVersionList {
+  items: ModelVersion[];
+  active_version_id: number | null;
+}
+
+export interface ActivationResult {
+  action: string;
+  loaded: boolean;
+  version: ModelVersion;
+}
+
+export interface ModelActivation {
+  id: number;
+  model_version_id: number | null;
+  previous_version_id: number | null;
+  action: string;
+  actor: string | null;
+  reason: string | null;
+  created_at: string;
+}
+
+export interface ModelActivationList {
+  items: ModelActivation[];
+}
+
+export interface ShadowEval {
+  id: number;
+  candidate_version_id: number | null;
+  active_version_id: number | null;
+  window_start: string;
+  window_end: string;
+  sample_count: number;
+  agreement_rate: number | null;
+  metrics: Record<string, unknown>;
+  created_by: string | null;
+  created_at: string;
 }
 
 export interface DetectionRunSummary {

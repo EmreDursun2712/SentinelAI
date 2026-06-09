@@ -142,6 +142,41 @@ def confidence_stats(confidences: list[float]) -> dict[str, float | None]:
     }
 
 
+def compute_feedback_stats(dispositions: list[str]) -> dict[str, Any]:
+    """Weak-label model-quality proxy from analyst alert dispositions.
+
+    Treats dispositions as weak ground truth: ``CONFIRMED`` ≈ true positive,
+    ``FALSE_POSITIVE`` ≈ false positive, ``OPEN``/``UNDER_REVIEW`` ≈ unresolved.
+    Returns per-disposition rates over all alerts in the window plus a
+    ``quality_score`` = CONFIRMED / (CONFIRMED + FALSE_POSITIVE) — a precision
+    proxy over alerts that got a definitive verdict (``None`` when there are
+    none). All rates are in [0, 1].
+    """
+    total = len(dispositions)
+    counts: dict[str, int] = {}
+    for d in dispositions:
+        counts[d] = counts.get(d, 0) + 1
+
+    def _rate(*labels: str) -> float:
+        return round(sum(counts.get(label, 0) for label in labels) / total, 4) if total else 0.0
+
+    confirmed = counts.get("CONFIRMED", 0)
+    false_positive = counts.get("FALSE_POSITIVE", 0)
+    verdicts = confirmed + false_positive
+    quality_score = round(confirmed / verdicts, 4) if verdicts else None
+
+    return {
+        "total": total,
+        "counts": counts,
+        "false_positive_rate": _rate("FALSE_POSITIVE"),
+        "confirmed_rate": _rate("CONFIRMED"),
+        "resolved_rate": _rate("RESOLVED"),
+        "unresolved_rate": _rate("OPEN", "UNDER_REVIEW"),
+        "verdict_count": verdicts,
+        "quality_score": quality_score,
+    }
+
+
 def status_for_score(score: float) -> DriftStatus:
     if score >= DRIFT_THRESHOLD:
         return DriftStatus.DRIFT
@@ -263,11 +298,16 @@ async def run_drift_check(
 
     pred_counts: dict[str, int] = {}
     confidences: list[float] = []
+    dispositions: list[str] = []
     for a in alerts:
         if a.prediction:
             pred_counts[a.prediction] = pred_counts.get(a.prediction, 0) + 1
         if a.confidence is not None:
             confidences.append(float(a.confidence))
+        if a.disposition is not None:
+            dispositions.append(a.disposition.value)
+
+    feedback = compute_feedback_stats(dispositions)
 
     prediction_psi: float | None = None
     recent_pred_props: dict[str, float] = {}
@@ -294,6 +334,7 @@ async def run_drift_check(
             "alert_count": len(alerts),
         },
         confidence_stats=confidence_stats(confidences),
+        feedback=feedback,
         drift_score=drift_score,
         status=status,
     )

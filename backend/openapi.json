@@ -1,6 +1,47 @@
 {
   "components": {
     "schemas": {
+      "ActivateRequest": {
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "ActivateRequest",
+        "type": "object"
+      },
+      "ActivationResult": {
+        "description": "Outcome of an activate/rollback: the now-active version + whether the\nartifact was loaded into this process's in-memory registry.",
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "loaded": {
+            "title": "Loaded",
+            "type": "boolean"
+          },
+          "version": {
+            "$ref": "#/components/schemas/ModelVersionOut"
+          }
+        },
+        "required": [
+          "action",
+          "loaded",
+          "version"
+        ],
+        "title": "ActivationResult",
+        "type": "object"
+      },
       "AgentName": {
         "enum": [
           "DETECTION",
@@ -1401,6 +1442,11 @@
             "title": "Feature Drift",
             "type": "object"
           },
+          "feedback": {
+            "additionalProperties": true,
+            "title": "Feedback",
+            "type": "object"
+          },
           "id": {
             "title": "Id",
             "type": "integer"
@@ -2335,6 +2381,94 @@
         "title": "MeOut",
         "type": "object"
       },
+      "ModelActivationListOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ModelActivationOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ModelActivationListOut",
+        "type": "object"
+      },
+      "ModelActivationOut": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "actor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "model_version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version Id"
+          },
+          "previous_version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Version Id"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "id",
+          "model_version_id",
+          "previous_version_id",
+          "action",
+          "actor",
+          "reason",
+          "created_at"
+        ],
+        "title": "ModelActivationOut",
+        "type": "object"
+      },
       "ModelInfoOut": {
         "properties": {
           "algorithm": {
@@ -2370,6 +2504,17 @@
             ],
             "title": "Benign Label"
           },
+          "calibrated": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calibrated"
+          },
           "classes": {
             "items": {
               "type": "string"
@@ -2387,6 +2532,17 @@
               }
             ],
             "title": "Db Id"
+          },
+          "expected_feature_coverage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Feature Coverage"
           },
           "feature_order": {
             "items": {
@@ -2465,6 +2621,108 @@
           "loaded"
         ],
         "title": "ModelInfoOut",
+        "type": "object"
+      },
+      "ModelVersionListOut": {
+        "properties": {
+          "active_version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Version Id"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ModelVersionOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ModelVersionListOut",
+        "type": "object"
+      },
+      "ModelVersionOut": {
+        "properties": {
+          "algorithm": {
+            "title": "Algorithm",
+            "type": "string"
+          },
+          "artifact_path": {
+            "title": "Artifact Path",
+            "type": "string"
+          },
+          "classes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Classes",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "feature_order": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Feature Order",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "metrics": {
+            "additionalProperties": true,
+            "title": "Metrics",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "trained_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trained At"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "version",
+          "algorithm",
+          "artifact_path",
+          "is_active",
+          "created_at"
+        ],
+        "title": "ModelVersionOut",
         "type": "object"
       },
       "OverviewSection": {
@@ -3246,36 +3504,6 @@
         "title": "Role",
         "type": "string"
       },
-      "RollbackRequest": {
-        "properties": {
-          "analyst_id": {
-            "anyOf": [
-              {
-                "maxLength": 80,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Analyst Id"
-          },
-          "note": {
-            "anyOf": [
-              {
-                "maxLength": 2000,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Note"
-          }
-        },
-        "title": "RollbackRequest",
-        "type": "object"
-      },
       "RollbackStatus": {
         "enum": [
           "NOT_REQUIRED",
@@ -3333,6 +3561,17 @@
             },
             "title": "By Label",
             "type": "object"
+          },
+          "feature_coverage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feature Coverage"
           },
           "model_name": {
             "title": "Model Name",
@@ -3464,6 +3703,115 @@
           }
         },
         "title": "SeverityPrioritySection",
+        "type": "object"
+      },
+      "ShadowEvalOut": {
+        "properties": {
+          "active_version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Version Id"
+          },
+          "agreement_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agreement Rate"
+          },
+          "candidate_version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Version Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "metrics": {
+            "additionalProperties": true,
+            "title": "Metrics",
+            "type": "object"
+          },
+          "sample_count": {
+            "title": "Sample Count",
+            "type": "integer"
+          },
+          "window_end": {
+            "format": "date-time",
+            "title": "Window End",
+            "type": "string"
+          },
+          "window_start": {
+            "format": "date-time",
+            "title": "Window Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "candidate_version_id",
+          "active_version_id",
+          "window_start",
+          "window_end",
+          "sample_count",
+          "agreement_rate",
+          "created_by",
+          "created_at"
+        ],
+        "title": "ShadowEvalOut",
+        "type": "object"
+      },
+      "ShadowEvalRequest": {
+        "properties": {
+          "candidate_version_id": {
+            "title": "Candidate Version Id",
+            "type": "integer"
+          },
+          "window_hours": {
+            "default": 24,
+            "maximum": 720.0,
+            "minimum": 1.0,
+            "title": "Window Hours",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "candidate_version_id"
+        ],
+        "title": "ShadowEvalRequest",
         "type": "object"
       },
       "TaskKind": {
@@ -4054,6 +4402,54 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "app__schemas__model_registry__RollbackRequest": {
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "RollbackRequest",
+        "type": "object"
+      },
+      "app__schemas__response__RollbackRequest": {
+        "properties": {
+          "analyst_id": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Analyst Id"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "title": "RollbackRequest",
         "type": "object"
       }
     }
@@ -6914,6 +7310,475 @@
         ]
       }
     },
+    "/api/v1/models": {
+      "get": {
+        "operationId": "list_models_api_v1_models_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "sentinelai_access",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sentinelai Access"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelVersionListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Models",
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/api/v1/models/activations": {
+      "get": {
+        "operationId": "list_activations_api_v1_models_activations_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "sentinelai_access",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sentinelai Access"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelActivationListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Activations",
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/api/v1/models/rollback": {
+      "post": {
+        "operationId": "rollback_model_api_v1_models_rollback_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "sentinelai_access",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sentinelai Access"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/app__schemas__model_registry__RollbackRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Request"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivationResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rollback Model",
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/api/v1/models/shadow": {
+      "get": {
+        "operationId": "list_shadow_evals_api_v1_models_shadow_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "sentinelai_access",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sentinelai Access"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ShadowEvalOut"
+                  },
+                  "title": "Response List Shadow Evals Api V1 Models Shadow Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Shadow Evals",
+        "tags": [
+          "models"
+        ]
+      },
+      "post": {
+        "operationId": "run_shadow_eval_api_v1_models_shadow_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "sentinelai_access",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sentinelai Access"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShadowEvalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShadowEvalOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Shadow Eval",
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/api/v1/models/{version_id}/activate": {
+      "post": {
+        "operationId": "activate_model_api_v1_models__version_id__activate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "sentinelai_access",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sentinelai Access"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ActivateRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Request"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivationResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Activate Model",
+        "tags": [
+          "models"
+        ]
+      }
+    },
     "/api/v1/reports": {
       "get": {
         "operationId": "list_reports_endpoint_api_v1_reports_get",
@@ -7876,7 +8741,7 @@
               "schema": {
                 "anyOf": [
                   {
-                    "$ref": "#/components/schemas/RollbackRequest"
+                    "$ref": "#/components/schemas/app__schemas__response__RollbackRequest"
                   },
                   {
                     "type": "null"

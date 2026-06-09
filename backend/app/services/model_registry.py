@@ -39,6 +39,56 @@ class ModelBundle:
     db_id: int | None = field(default=None)
 
 
+def load_bundle(model_dir: Path | str) -> ModelBundle | None:
+    """Read a version directory into a ``ModelBundle`` with no global side effects.
+
+    Returns None on any failure (missing files, unpicklable model, invalid
+    metadata). Used to load a *candidate* model for shadow evaluation without
+    disturbing the active bundle.
+    """
+    model_dir = Path(model_dir)
+    model_file = model_dir / "model.joblib"
+    meta_file = model_dir / "metadata.json"
+
+    if not model_file.is_file() or not meta_file.is_file():
+        logger.warning(
+            "model.not_found",
+            model_dir=str(model_dir),
+            model_file=str(model_file),
+            metadata_file=str(meta_file),
+        )
+        return None
+
+    try:
+        pipeline = joblib.load(model_file)
+        metadata = json.loads(meta_file.read_text())
+    except Exception as exc:
+        logger.exception("model.load_failed", error=str(exc))
+        return None
+
+    classes = list(metadata.get("classes", []))
+    feature_order = list(metadata.get("feature_order", []))
+    if not classes or not feature_order:
+        logger.error(
+            "model.invalid_metadata",
+            classes_len=len(classes),
+            feature_order_len=len(feature_order),
+        )
+        return None
+
+    return ModelBundle(
+        pipeline=pipeline,
+        metadata=metadata,
+        classes=classes,
+        feature_order=feature_order,
+        name=str(metadata.get("name", "unknown")),
+        version=str(metadata.get("version", "unknown")),
+        algorithm=str(metadata.get("algorithm", "unknown")),
+        artifact_dir=model_dir,
+        loaded_at=datetime.now(UTC),
+    )
+
+
 class ModelRegistry:
     """Process-wide singleton for the currently loaded model artifact."""
 
@@ -54,48 +104,19 @@ class ModelRegistry:
 
     def load_from_disk(self, artifacts_dir: Path | str) -> ModelBundle | None:
         """Try to load ``<artifacts_dir>/latest/``. Returns None on failure."""
-        artifacts_path = Path(artifacts_dir)
-        latest = artifacts_path / "latest"
-        model_file = latest / "model.joblib"
-        meta_file = latest / "metadata.json"
+        return self.load_from_dir(Path(artifacts_dir) / "latest")
 
-        if not model_file.is_file() or not meta_file.is_file():
-            logger.warning(
-                "model.not_found",
-                artifacts_dir=str(artifacts_path),
-                model_file=str(model_file),
-                metadata_file=str(meta_file),
-            )
+    def load_from_dir(self, model_dir: Path | str) -> ModelBundle | None:
+        """Load an arbitrary version directory and make it the active bundle.
+
+        Used both for the default ``latest/`` load and to activate a specific
+        version (model lifecycle). Returns None on any failure (missing files,
+        unpicklable model, invalid metadata) without disturbing the current
+        bundle.
+        """
+        bundle = load_bundle(model_dir)
+        if bundle is None:
             return None
-
-        try:
-            pipeline = joblib.load(model_file)
-            metadata = json.loads(meta_file.read_text())
-        except Exception as exc:
-            logger.exception("model.load_failed", error=str(exc))
-            return None
-
-        classes = list(metadata.get("classes", []))
-        feature_order = list(metadata.get("feature_order", []))
-        if not classes or not feature_order:
-            logger.error(
-                "model.invalid_metadata",
-                classes_len=len(classes),
-                feature_order_len=len(feature_order),
-            )
-            return None
-
-        bundle = ModelBundle(
-            pipeline=pipeline,
-            metadata=metadata,
-            classes=classes,
-            feature_order=feature_order,
-            name=str(metadata.get("name", "unknown")),
-            version=str(metadata.get("version", "unknown")),
-            algorithm=str(metadata.get("algorithm", "unknown")),
-            artifact_dir=latest,
-            loaded_at=datetime.now(UTC),
-        )
 
         with self._lock:
             self._bundle = bundle

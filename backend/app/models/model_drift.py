@@ -56,6 +56,12 @@ class ModelDriftSnapshot(Base):
     confidence_stats: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
     )
+    # Analyst-feedback quality proxy derived from alert dispositions in the window
+    # (false-positive / confirmed / unresolved rates + a quality score). Empty for
+    # snapshots taken before feedback tracking existed. See drift_service.
+    feedback: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
     drift_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     status: Mapped[DriftStatus] = mapped_column(
         SAEnum(DriftStatus, name="drift_status_enum", native_enum=False, length=10),

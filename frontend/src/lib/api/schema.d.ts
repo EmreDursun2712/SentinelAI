@@ -663,6 +663,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Models */
+        get: operations["list_models_api_v1_models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/models/activations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Activations */
+        get: operations["list_activations_api_v1_models_activations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/models/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rollback Model */
+        post: operations["rollback_model_api_v1_models_rollback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/models/shadow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Shadow Evals */
+        get: operations["list_shadow_evals_api_v1_models_shadow_get"];
+        put?: never;
+        /** Run Shadow Eval */
+        post: operations["run_shadow_eval_api_v1_models_shadow_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/models/{version_id}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Activate Model */
+        post: operations["activate_model_api_v1_models__version_id__activate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reports": {
         parameters: {
             query?: never;
@@ -1047,6 +1133,23 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** ActivateRequest */
+        ActivateRequest: {
+            /** Reason */
+            reason?: string | null;
+        };
+        /**
+         * ActivationResult
+         * @description Outcome of an activate/rollback: the now-active version + whether the
+         *     artifact was loaded into this process's in-memory registry.
+         */
+        ActivationResult: {
+            /** Action */
+            action: string;
+            /** Loaded */
+            loaded: boolean;
+            version: components["schemas"]["ModelVersionOut"];
+        };
         /**
          * AgentName
          * @enum {string}
@@ -1558,6 +1661,10 @@ export interface components {
             feature_drift: {
                 [key: string]: unknown;
             };
+            /** Feedback */
+            feedback?: {
+                [key: string]: unknown;
+            };
             /** Id */
             id: number;
             /** Model Version Id */
@@ -1919,6 +2026,31 @@ export interface components {
             /** Username */
             username: string;
         };
+        /** ModelActivationListOut */
+        ModelActivationListOut: {
+            /** Items */
+            items: components["schemas"]["ModelActivationOut"][];
+        };
+        /** ModelActivationOut */
+        ModelActivationOut: {
+            /** Action */
+            action: string;
+            /** Actor */
+            actor: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: number;
+            /** Model Version Id */
+            model_version_id: number | null;
+            /** Previous Version Id */
+            previous_version_id: number | null;
+            /** Reason */
+            reason: string | null;
+        };
         /** ModelInfoOut */
         ModelInfoOut: {
             /** Algorithm */
@@ -1927,10 +2059,14 @@ export interface components {
             artifact_dir?: string | null;
             /** Benign Label */
             benign_label?: string | null;
+            /** Calibrated */
+            calibrated?: boolean | null;
             /** Classes */
             classes?: string[];
             /** Db Id */
             db_id?: number | null;
+            /** Expected Feature Coverage */
+            expected_feature_coverage?: number | null;
             /** Feature Order */
             feature_order?: string[];
             /** Is Active */
@@ -1949,6 +2085,43 @@ export interface components {
             threshold?: number | null;
             /** Version */
             version?: string | null;
+        };
+        /** ModelVersionListOut */
+        ModelVersionListOut: {
+            /** Active Version Id */
+            active_version_id?: number | null;
+            /** Items */
+            items: components["schemas"]["ModelVersionOut"][];
+        };
+        /** ModelVersionOut */
+        ModelVersionOut: {
+            /** Algorithm */
+            algorithm: string;
+            /** Artifact Path */
+            artifact_path: string;
+            /** Classes */
+            classes?: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Feature Order */
+            feature_order?: string[];
+            /** Id */
+            id: number;
+            /** Is Active */
+            is_active: boolean;
+            /** Metrics */
+            metrics?: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name: string;
+            /** Trained At */
+            trained_at?: string | null;
+            /** Version */
+            version: string;
         };
         /** OverviewSection */
         OverviewSection: {
@@ -2231,13 +2404,6 @@ export interface components {
          * @enum {string}
          */
         Role: "VIEWER" | "ANALYST" | "ADMIN";
-        /** RollbackRequest */
-        RollbackRequest: {
-            /** Analyst Id */
-            analyst_id?: string | null;
-            /** Note */
-            note?: string | null;
-        };
         /**
          * RollbackStatus
          * @enum {string}
@@ -2268,6 +2434,8 @@ export interface components {
             by_label: {
                 [key: string]: number;
             };
+            /** Feature Coverage */
+            feature_coverage?: number | null;
             /** Model Name */
             model_name: string;
             /** Model Version */
@@ -2311,6 +2479,50 @@ export interface components {
             severity?: components["schemas"]["Severity"] | null;
             /** Triaged At */
             triaged_at?: string | null;
+        };
+        /** ShadowEvalOut */
+        ShadowEvalOut: {
+            /** Active Version Id */
+            active_version_id: number | null;
+            /** Agreement Rate */
+            agreement_rate: number | null;
+            /** Candidate Version Id */
+            candidate_version_id: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By */
+            created_by: string | null;
+            /** Id */
+            id: number;
+            /** Metrics */
+            metrics?: {
+                [key: string]: unknown;
+            };
+            /** Sample Count */
+            sample_count: number;
+            /**
+             * Window End
+             * Format: date-time
+             */
+            window_end: string;
+            /**
+             * Window Start
+             * Format: date-time
+             */
+            window_start: string;
+        };
+        /** ShadowEvalRequest */
+        ShadowEvalRequest: {
+            /** Candidate Version Id */
+            candidate_version_id: number;
+            /**
+             * Window Hours
+             * @default 24
+             */
+            window_hours: number;
         };
         /**
          * TaskKind
@@ -2530,6 +2742,18 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** RollbackRequest */
+        app__schemas__model_registry__RollbackRequest: {
+            /** Reason */
+            reason?: string | null;
+        };
+        /** RollbackRequest */
+        app__schemas__response__RollbackRequest: {
+            /** Analyst Id */
+            analyst_id?: string | null;
+            /** Note */
+            note?: string | null;
         };
     };
     responses: never;
@@ -3833,6 +4057,222 @@ export interface operations {
             };
         };
     };
+    list_models_api_v1_models_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                sentinelai_access?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelVersionListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_activations_api_v1_models_activations_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                sentinelai_access?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelActivationListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rollback_model_api_v1_models_rollback_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                sentinelai_access?: string | null;
+            };
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["app__schemas__model_registry__RollbackRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivationResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_shadow_evals_api_v1_models_shadow_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                sentinelai_access?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShadowEvalOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_shadow_eval_api_v1_models_shadow_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                sentinelai_access?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShadowEvalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShadowEvalOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    activate_model_api_v1_models__version_id__activate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                version_id: number;
+            };
+            cookie?: {
+                sentinelai_access?: string | null;
+            };
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ActivateRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivationResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_reports_endpoint_api_v1_reports_get: {
         parameters: {
             query?: {
@@ -4216,7 +4656,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["RollbackRequest"] | null;
+                "application/json": components["schemas"]["app__schemas__response__RollbackRequest"] | null;
             };
         };
         responses: {

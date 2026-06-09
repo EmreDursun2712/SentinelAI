@@ -44,6 +44,23 @@ For every event passed through detection:
 The `simulated=TRUE` ethics guardrail lives on `response_actions`, not on
 detection — detection itself is a read-only inference step.
 
+## Feature coverage & calibrated confidence
+
+A model is only meaningful on the feature vector it was trained on. Two
+safeguards keep train and serve aligned (see [ML_TRAINING.md](ML_TRAINING.md)):
+
+- **Coverage validation.** Before inference the backend computes the share of the
+  model's trained features actually present (finite) in the batch
+  (`assess_feature_coverage`). Below the model's declared
+  `expected_feature_coverage` (metadata) — or `SENTINEL_DETECTION_FEATURE_COVERAGE_WARN`
+  as a fallback — it logs `detection.low_feature_coverage`. Setting
+  `SENTINEL_DETECTION_FEATURE_COVERAGE_MIN > 0` makes under-coverage a hard 400
+  instead. `POST /detection/run` returns the batch `feature_coverage`; the
+  dashboard model panel shows the model's expected coverage.
+- **Calibrated confidence.** When a model is trained with `--calibrate`, its
+  `predict_proba` is calibrated, so the confidence the alert threshold compares
+  against is a real probability. `GET /detection/model` reports `calibrated`.
+
 ## Endpoints
 
 | Method | Path                                  | Persistence | Notes                                                  |
@@ -87,10 +104,18 @@ drift **unavailable** (graceful degradation).
 | `WATCH` | `0.10–0.25`    | Moderate shift; keep an eye on it.       |
 | `DRIFT` | `≥ 0.25`       | Significant shift; consider retraining.  |
 
+**Analyst-feedback quality proxy.** Each snapshot also carries a `feedback`
+block derived from alert dispositions in the window — a weak-label signal that
+complements the distributional PSI: `false_positive_rate`, `confirmed_rate`,
+`unresolved_rate`, and a `quality_score` (CONFIRMED / (CONFIRMED +
+FALSE_POSITIVE), a precision proxy). Rising false positives / a falling quality
+score flags a model that may need retraining even when feature PSI looks stable.
+See [MODEL_LIFECYCLE.md](MODEL_LIFECYCLE.md#analyst-feedback-as-a-quality-proxy).
+
 Each run persists a `model_drift_snapshots` row. The dashboard's **Model
 health** panel shows the latest status, drift score, sample count, average
-confidence, last-checked time, and the top drifting features; analysts/admins
-can trigger a check with **Run drift check**.
+confidence, last-checked time, the top drifting features, and the analyst-feedback
+quality proxy; analysts/admins can trigger a check with **Run drift check**.
 
 ## Configuration
 
@@ -99,6 +124,8 @@ can trigger a check with **Run drift check**.
 | `SENTINEL_ML_ARTIFACTS_DIR`          | `/app/ml_artifacts`  | Path containing the `latest/` bundle.            |
 | `SENTINEL_DETECTION_THRESHOLD`       | `0.5`                | Minimum top-class probability to create an alert. |
 | `SENTINEL_DETECTION_BENIGN_LABEL`    | `BENIGN`             | Class that suppresses alerts at any confidence.   |
+| `SENTINEL_DETECTION_FEATURE_COVERAGE_WARN` | `0.5`          | Coverage below which inference logs a warning (model metadata wins). |
+| `SENTINEL_DETECTION_FEATURE_COVERAGE_MIN`  | `0.0`          | `> 0` ⇒ under-coverage is a hard 400; `0` ⇒ graceful degradation. |
 
 ## Storage contract
 

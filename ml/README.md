@@ -84,15 +84,46 @@ Refreshed latest pointer at /…/ml/artifacts/latest
 1. Download the dataset from <https://www.unb.ca/cic/datasets/ids-2017.html>.
 2. Drop the day-by-day CSVs under `ml/data/cic-ids-2017/`. Raw files are
    gitignored.
-3. Train:
+3. Train with the `cic2017` profile (folds attack sub-labels into coarse families):
 
    ```bash
-   python -m ml.train --data ml/data/cic-ids-2017/
+   python -m ml.train --data ml/data/cic-ids-2017 --profile cic2017
    ```
 
 The loader tolerates the CIC-IDS2017 column-name quirks (UTF-8 BOM, leading
 spaces, mixed case) — they're normalized to `snake_case` so trained feature
 names match what the backend ingestor produces.
+
+See **[docs/ML_TRAINING.md](../docs/ML_TRAINING.md)** for the full real-data
+workflow, dataset profiles, hyperparameter search, and calibration.
+
+## Hyperparameter search & calibration (optional)
+
+Both are off by default so normal training stays fast.
+
+```bash
+# Cross-validated search over a small grid (random or grid); best params used + recorded.
+python -m ml.train --synthetic 50000 --search random --search-iter 30
+
+# Probability calibration — the served confidence (hence the alert threshold
+# decision) then uses calibrated probabilities. Brier score + reliability curve
+# are recorded either way.
+python -m ml.train --synthetic 50000 --calibrate sigmoid
+```
+
+## Feature parity (train ↔ serve)
+
+The synthetic generator and the bundled sample CSV share **one canonical feature
+set**, so a synthetic-trained model gets full feature coverage on the sample.
+Regenerate the sample (all features + metadata columns) with:
+
+```bash
+python -m ml.synthetic --sample --output backend/data/samples/sample_flows.csv
+```
+
+Each model records `expected_feature_coverage`; the backend warns (or fails) when
+an inference batch is missing too many trained features. The `ml/tests/` suite
+fails if the sample CSV or generator drifts from the trained feature set.
 
 ## Evaluate a saved model
 
@@ -119,7 +150,7 @@ Every training run produces a directory with four files:
 ```
 ml/artifacts/<version>/
 ├── model.joblib           sklearn Pipeline: SimpleImputer → classifier
-├── metadata.json          name, version, algorithm, classes, feature_order, training params, metrics summary, baseline
+├── metadata.json          name, version, algorithm, classes, feature_order, training params, metrics summary, baseline, profile, expected_feature_coverage, hpo, calibration
 ├── metrics.json           validation + test scalar/per-class metrics
 └── confusion_matrix.json  matrices for validation + test
 ```
@@ -193,6 +224,13 @@ The Detection Agent in Phase 3 will use exactly this contract.
 | `--output`          | `ml/artifacts/<version>`               | Output directory.                                      |
 | `--algorithm`       | `random_forest`                        | Or `gradient_boosting`.                                |
 | `--name`            | `sentinelai-detection`                 | Used in `metadata.json`.                               |
+| `--profile`         | `auto`                                 | `auto` \| `synthetic` \| `cic2017` label handling.     |
+| `--search`          | `none`                                 | `none` \| `random` \| `grid` hyperparameter search.    |
+| `--search-iter`     | `20`                                   | Candidates for `--search random`.                      |
+| `--search-cv`       | `3`                                    | CV folds for the search.                               |
+| `--calibrate`       | `none`                                 | `none` \| `sigmoid` \| `isotonic` probability calibration. |
+| `--calibrate-cv`    | `3`                                    | CV folds for calibration.                              |
+| `--min-feature-coverage` | `0.8`                             | Stored as `expected_feature_coverage`.                 |
 | `--test-size`       | `0.15`                                 | Fraction held out for test.                            |
 | `--val-size`        | `0.15`                                 | Fraction held out for validation.                      |
 | `--max-samples`     | unset                                  | Subsample after cleaning, for fast iteration.          |

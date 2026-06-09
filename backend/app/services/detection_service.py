@@ -84,6 +84,73 @@ def should_create_alert(label: str, confidence: float, threshold: float, benign_
     return confidence >= threshold
 
 
+def assess_feature_coverage(
+    feature_dicts: list[dict[str, Any]], feature_order: list[str]
+) -> dict[str, Any]:
+    """How many of the model's trained features are present in the input.
+
+    A feature counts as *present* when it carries a finite value in at least one
+    row of the batch — so a column that is entirely absent or all-NaN counts as
+    missing. ``coverage`` is ``n_present / n_expected`` and is the signal the
+    backend uses to warn (or fail) on train/serve feature mismatch. Empty input
+    or an empty ``feature_order`` returns ``coverage=1.0`` (nothing to assess).
+    """
+    n_expected = len(feature_order)
+    if n_expected == 0 or not feature_dicts:
+        return {
+            "n_expected": n_expected,
+            "n_present": n_expected,
+            "coverage": 1.0,
+            "missing": [],
+        }
+    present: set[str] = set()
+    for fd in feature_dicts:
+        for col in feature_order:
+            if col not in present and np.isfinite(_to_float(fd.get(col))):
+                present.add(col)
+        if len(present) == n_expected:
+            break
+    missing = [col for col in feature_order if col not in present]
+    return {
+        "n_expected": n_expected,
+        "n_present": len(present),
+        "coverage": round(len(present) / n_expected, 4),
+        "missing": missing,
+    }
+
+
+def coverage_warn_threshold(bundle: ModelBundle, fallback: float) -> float:
+    """The coverage below which inference should warn for ``bundle``.
+
+    Prefers the model's declared ``expected_feature_coverage`` (set at train time)
+    so the model's own expectation drives the warning; falls back to the
+    operator-configured default otherwise.
+    """
+    declared = bundle.metadata.get("expected_feature_coverage")
+    try:
+        return float(declared) if declared is not None else float(fallback)
+    except (TypeError, ValueError):
+        return float(fallback)
+
+
+def _log_coverage(
+    bundle: ModelBundle, feature_dicts: list[dict[str, Any]], warn_below: float
+) -> dict[str, Any]:
+    """Compute coverage and emit a warning when it dips below ``warn_below``."""
+    report = assess_feature_coverage(feature_dicts, bundle.feature_order)
+    if report["coverage"] < warn_below:
+        logger.warning(
+            "detection.low_feature_coverage",
+            coverage=report["coverage"],
+            warn_below=warn_below,
+            n_present=report["n_present"],
+            n_expected=report["n_expected"],
+            missing=report["missing"][:20],
+            model_version=bundle.version,
+        )
+    return report
+
+
 # ---------------------------------------------------------------------------
 # Inference helpers — the bundle is required; pass an already-loaded one.
 # ---------------------------------------------------------------------------
@@ -115,7 +182,9 @@ def predict_flows(
     """Run inference on raw ``FlowRecordIn`` rows. No DB writes."""
     if not flows:
         return []
-    X = build_feature_matrix([f.features for f in flows], bundle.feature_order)
+    feature_dicts = [f.features for f in flows]
+    _log_coverage(bundle, feature_dicts, coverage_warn_threshold(bundle, 0.5))
+    X = build_feature_matrix(feature_dicts, bundle.feature_order)
     labels, confs, probs = _run_inference(bundle, X)
 
     predictions: list[Prediction] = []
@@ -229,7 +298,9 @@ async def detect_events(
 
     model_version_id = await ensure_model_version_row(session, bundle)
 
-    X = build_feature_matrix([dict(ev.features or {}) for ev in events], bundle.feature_order)
+    feature_dicts = [dict(ev.features or {}) for ev in events]
+    _log_coverage(bundle, feature_dicts, coverage_warn_threshold(bundle, 0.5))
+    X = build_feature_matrix(feature_dicts, bundle.feature_order)
     # predict_proba is CPU-bound and synchronous; offload to a worker thread
     # so the event loop stays responsive when classifying large batches.
     labels, confs, probs = await asyncio.to_thread(_run_inference, bundle, X)
