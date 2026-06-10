@@ -7,6 +7,8 @@ A FastAPI backend, a React + TypeScript dashboard, a scikit-learn ML pipeline tr
 See [PROJECT_ARCHITECTURE.md](PROJECT_ARCHITECTURE.md) for the full design,
 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the deployment runbook, and
 [docs/QUALITY.md](docs/QUALITY.md) for the test inventory and pre-demo checklist.
+A Turkish, presentation-oriented "which file does what" guide is in
+[docs/KOD_REHBERI.md](docs/KOD_REHBERI.md).
 
 ---
 
