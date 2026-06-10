@@ -1,5 +1,7 @@
 # SentinelAI
 
+> 🇬🇧 English below · 🇹🇷 **Türkçe için aşağı kaydırın** ([Türkçe README](#-sentinelai--türkçe))
+
 AI-driven intrusion detection and response dashboard. Third-year Computer and Network Security term project.
 
 A FastAPI backend, a React + TypeScript dashboard, a scikit-learn ML pipeline trained on CIC-IDS2017, and a five-agent workflow (Detect → Triage → Respond → Investigate → Report) — all wired together through PostgreSQL and Docker Compose. Response actions are **simulated only**; the system never touches a real firewall, host, or third-party service.
@@ -386,3 +388,243 @@ effect on an authorized lab network — never production or external targets; se
 [docs/LAB_RESPONSE.md](docs/LAB_RESPONSE.md). The optional live sensor reads flow
 **metadata only** (never payloads), is off by default, and runs only against
 explicitly authorized lab subnets. See [docs/ETHICS.md](docs/ETHICS.md).
+
+---
+---
+
+# 🇹🇷 SentinelAI — Türkçe
+
+Yapay zekâ destekli saldırı tespit ve müdahale paneli. Üçüncü sınıf Bilgisayar ve Ağ
+Güvenliği dönem projesi.
+
+Bir FastAPI backend, React + TypeScript kontrol paneli, CIC-IDS2017 üzerinde eğitilmiş bir
+scikit-learn ML hattı ve beş ajanlı bir iş akışı (Tespit → Önceliklendirme → Müdahale →
+Soruşturma → Raporlama) — hepsi PostgreSQL ve Docker Compose ile birbirine bağlı. Müdahale
+aksiyonları **yalnızca simüledir**; sistem gerçek bir firewall'a, sunucuya veya üçüncü taraf
+servise asla dokunmaz.
+
+Tam tasarım için [PROJECT_ARCHITECTURE.md](PROJECT_ARCHITECTURE.md), dağıtım için
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), test envanteri için
+[docs/QUALITY.md](docs/QUALITY.md). "Hangi dosya ne yapar" Türkçe sunum rehberi:
+[docs/KOD_REHBERI.md](docs/KOD_REHBERI.md).
+
+## Depo yapısı
+
+```
+SentinelAI/
+├── backend/      FastAPI uygulaması, SQLAlchemy modelleri, ajan modülleri, testler
+├── frontend/     React + TypeScript + Vite kontrol paneli
+├── ml/           Çevrimdışı eğitim hattı (CIC-IDS2017)
+├── sensor/       Opsiyonel canlı akış sensörü (Zeek/Suricata log okuma, lab-only)
+├── infra/        Postgres init, yardımcı betikler, ters-proxy yapılandırması
+├── docs/         Mimari, etik, kalite, ajan kılavuzları
+├── docker-compose.yml
+├── Makefile
+├── .env.example
+└── PROJECT_ARCHITECTURE.md
+```
+
+## Önkoşullar
+
+- Compose v2 ile Docker Desktop 4.x (veya Docker Engine 24+)
+- Make (her kısayolun ham komutu da gösterilir)
+- Smoke testi için `curl` ve `jq`
+- Modeli host üzerinde eğitmek için Python 3.12 (bootstrap betiği `ml/.venv`'i otomatik kurar)
+
+## Hızlı başlangıç — tek komut
+
+```bash
+make bootstrap
+```
+
+Bu tek hedef şunları yapar:
+
+1. `.env` yoksa `.env.example` → `.env` kopyalar.
+2. Tüm servisleri derleyip başlatır — `postgres`, `redis`, `backend`, `worker`, `frontend`
+   (`docker compose up -d --build`).
+3. `backend /health` yanıt verene kadar bekler.
+4. `ml/artifacts/latest/` altında model yoksa `ml/.venv` oluşturur, 50 bin satırlık sentetik
+   model eğitir ve artefaktları yazar.
+5. Backend'i yeniden başlatır ve `/api/v1/detection/model` `loaded: true` raporlayana kadar bekler.
+
+Bittiğinde kontrol paneli için <http://localhost:5173> adresini aç. Bootstrap'in oluşturduğu
+admin (`.env` içindeki `BACKEND_BOOTSTRAP_ADMIN_*`) ile giriş yap.
+
+Uyarılar, raporlar ve denetim izi ile doldurmak için:
+
+```bash
+make smoke           # bash infra/scripts/smoke_demo.sh
+```
+
+## Servisler
+
+| Servis     | URL                                    | Not                            |
+| ---------- | -------------------------------------- | ------------------------------ |
+| `frontend` | http://localhost:5173                  | Vite geliştirme sunucusu (HMR) |
+| `backend`  | http://localhost:8000                  | FastAPI; OpenAPI `/docs`       |
+| `worker`   | —                                      | arq async görev işleyici       |
+| `postgres` | `postgres://localhost:5432/sentinelai` | Kalıcı volume                  |
+| `redis`    | `redis://localhost:6379/0`             | Limit + WS pub/sub + kuyruk    |
+
+Sağlık probları:
+
+```bash
+curl http://localhost:8000/health                  # her zaman 200
+curl http://localhost:8000/readyz                  # DB/Redis/kuyruk/model durumu (gerekli bağımlılık çökerse 503)
+curl http://localhost:8000/api/v1/detection/model  # { "loaded": true, ... } (kimlik doğrulamalı)
+```
+
+## Make hedefleri
+
+Canlı menü için `make help`. En sık kullanılanlar: `make bootstrap` (tek-komut kurulum),
+`up` / `down` / `reset` (DB volume'unu siler), `logs` / `logs-backend`, `seed` (modeli
+yeniden eğit), `smoke` (11 adımlı uçtan uca test), `e2e` (tam kapı), `test`
+(backend pytest + frontend vitest), `test-integration` (gerçek Postgres),
+`typecheck`, `lint`, `backup-db` / `restore-db`, `shell-db`.
+
+## Yerel geliştirme (Docker'sız)
+
+```bash
+# Backend
+cd backend && cp .env.example .env
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]" && alembic upgrade head && uvicorn app.main:app --reload
+
+# Frontend
+cd frontend && cp .env.example .env && npm install && npm run dev
+
+# ML hattı
+cd ml && python -m venv .venv && source .venv/bin/activate
+pip install -e . && python -m ml.train --synthetic 50000
+```
+
+## Kalite kapıları
+
+Her push/PR'da CI çalışır; aynı kontroller yerelde pre-commit ile koşar. Detay
+[docs/QUALITY.md](docs/QUALITY.md). GitHub Actions iş akışları: `backend`
+(ruff + pytest + gerçek-Postgres entegrasyon), `frontend` (typecheck + vitest + build +
+advisory Playwright e2e), `security` (pip-audit + npm audit + CycloneDX SBOM), `e2e`
+(haftalık). [Dependabot](.github/dependabot.yml) haftalık bağımlılık PR'ları açar.
+
+```bash
+# Push'tan önce yerelde:
+pip install pre-commit && pre-commit install
+pre-commit run --all-files
+cd backend && ruff check . && ruff format --check . && pytest -q
+cd frontend && npm run typecheck && npm test
+```
+
+Ruff her yerde `0.15.16`'ya sabitlenmiştir (her makinede aynı biçimlendirme).
+
+## Kimlik doğrulama
+
+Kısa ömürlü **erişim token'ları** (15 dk, `Authorization: Bearer`, SPA tarafından bellekte
+tutulur) artı **httpOnly Secure çerez** içindeki uzun ömürlü **refresh oturumları** (sunucu
+tarafı iptal ile). `POST /api/v1/auth/refresh` refresh token'ı döndürür; logout/pasifleştirme
+iptal eder. Çerezle kimlik doğrulanan mutasyonlar **çift-gönderim CSRF** ile korunur
+(`sentinelai_csrf` çerezi → `X-CSRF-Token` başlığı). **Hiçbir token `localStorage`'da
+tutulmaz.** Public uçlar: `POST /auth/login`, `POST /auth/refresh`, `/health`, `/readyz`,
+`/docs`, OpenAPI.
+
+Yetkilendirme metot tabanlı RBAC'tır: okuma **VIEWER**+, mutasyon **ANALYST**+, kullanıcı
+yönetimi **ADMIN** (`VIEWER < ANALYST < ADMIN`). Her korumalı istek `is_active` + token
+sürümünü DB'ye karşı yeniden kontrol eder; pasifleştirilen veya her yerden çıkış yapan
+kullanıcı erişimini anında kaybeder.
+
+> **Yerel geliştirme:** Tarayıcılar düz HTTP üzerinde `Secure` çerezleri düşürür —
+> HTTPS olmayan geliştirmede `SENTINEL_AUTH_COOKIE_SECURE=false` ayarla (Compose zaten yapar).
+> Üretim güvenli varsayılanı korur.
+
+İlk admin başlangıçta **her iki** env değişkeni de ayarlıysa oluşturulur (asla varsayılan
+kullanıcı yaratılmaz). Tam akış ve curl örnekleri: [docs/AUTH.md](docs/AUTH.md).
+
+## Güvenlik varsayılanları
+
+Gönderilen yapılandırma **varsayılan olarak güvenlidir** — taze bir klon paket yakalayamaz,
+gerçek bir firewall'a dokunamaz veya kendini dışa açamaz:
+
+| Varsayılan | Davranış |
+| --- | --- |
+| **Müdahale = simüle** | Gerçek (simüle-olmayan) aksiyon LAB modu dışında *yapısal olarak imkânsız* (Postgres CHECK). LAB **kapalı**. |
+| **Lab müdahale = kapalı** | `RESPONSE_ENABLED=true` + `MODE=lab` + lab yürütücü + izinli CIDR + analist onayı gerektirir; her etki geri alınabilir. |
+| **Canlı sensör = kapalı** | `SENSOR_ENABLED=true` + izinli CIDR gerektirir; yalnız akış **metadatası** okur (NIC yok, payload yok). |
+| **Veri saklama = kapalı** | Tüm `RETENTION_*_DAYS` varsayılan `0` (hiçbir şey silinmez). Önce dry-run. |
+| **Auth = zorunlu** | Her `/api/v1` ucu kimlik ister (login/refresh/telemetry/health/docs hariç); RBAC. |
+| **Sırlar fail-closed** | Backend, üretim benzeri ortamda varsayılan JWT sırrı ile başlamayı reddeder. |
+| **Varsayılan kullanıcı yok** | Admin yalnız iki bootstrap env'i de ayarlıysa oluşturulur; hiçbir şey gömülü değil. |
+| **Üretimde Redis zorunlu** | Hız limiti, WS yayını ve görev kuyruğu üretimde Redis gerektirir (fail-closed). |
+
+Açık bir dağıtımdan önce `BACKEND_API_KEY`, `BACKEND_JWT_SECRET` ve bootstrap admin
+parolasını (hepsi `change-me`) döndürün. Detay: [docs/DEPLOYMENT_SECURITY.md](docs/DEPLOYMENT_SECURITY.md).
+
+## Güvenlik sertleştirme
+
+Auth ötesinde derinlemesine savunma: her yanıtta **HTTP güvenlik başlıkları** (CSP, nosniff,
+frame-deny, Referrer/Permissions-Policy, üretimde HSTS); **parola politikası** (≥12 karakter,
+4 kategoriden ≥3'ü, kullanıcı adı içermez); **hesap kilidi** (15 dk'da 5 başarısız → 15 dk
+kilit); **CORS izin listeleme** (kimlik bilgisiyle `*` yok); **güvenli çerez + TLS**;
+**bağımlılık taraması** (CI'da pip-audit / npm audit + Dependabot).
+
+## Hız sınırlama
+
+Tüm API trafiği **Redis** destekli (kayan pencere, replikalar arası paylaşımlı) sınırlanır.
+Kimlik doğrulananlarda kullanıcı başına, login'de IP+kullanıcı başına anahtarlanır. Limit
+aşımında `Retry-After` başlığıyla **HTTP 429**. Varsayılanlar (`SENTINEL_RATE_LIMIT_*` ile
+ayarlanır): login 5/dk, genel kimlikli 120/dk, ingest 10/dk, detection 5/dk, rapor 20/dk,
+yanıt 60/dk. Üretimde Redis **zorunlu**; geliştirmede ulaşılamazsa süreç-içi limiter'a düşer.
+
+## Gözlemlenebilirlik ve operasyon
+
+- **Metrikler** — `GET /metrics`'te Prometheus (HTTP gecikmesi, WS bağlantıları, ingest,
+  detection, yanıt, drift). Etiketler düşük-kardinalite; ID/kullanıcı/IP taşımaz.
+- **İzleme** — OpenTelemetry, opsiyonel + varsayılan no-op.
+- **Loglama** — structlog, istek başına `request_id` + kimlikli kullanıcı/rol; sır loglanmaz.
+- **Hazırlık** — `GET /readyz` bağımlılık başına yapısal durum (DB/Redis/kuyruk/model);
+  `GET /health` hafif canlılık probu. Üst bar Backend/Database/Redis/Model/Live pillerini gösterir.
+- **Yedek/DR** — `make backup-db` ve `make restore-db` ([docs/BACKUP_DR.md](docs/BACKUP_DR.md)).
+
+## Asenkron görev kuyruğu
+
+Uzun işler (büyük detection batch'leri, rapor, günlük özet, drift, retention, opsiyonel
+retrain) istek thread'ini bloklamadan **Redis destekli [arq](https://arq-docs.helpmanual.io/)
+worker**'ında çalışır. `/api/v1/tasks/*`'a POST → anında **task id**; `GET /api/v1/tasks/{id}`
+ve canlı `task.updated` WebSocket olaylarıyla izlenir. Durum `tasks` tablosunda. `worker`
+Compose servisi bunu çalıştırır. Detay: [docs/TASK_QUEUE.md](docs/TASK_QUEUE.md).
+
+## Ortam değişkenleri
+
+Her seviyede (`./`, `backend/`, `frontend/`) `.env.example` kopyalayıp ayarla. Kök `.env`
+Compose tarafından, servis bazlı dosyalar yerel çalıştırmalarda kullanılır. Varsayılanlar
+sınıf demosu için güvenlidir ama **açık bir dağıtımdan önce döndürülmelidir** —
+`BACKEND_API_KEY`, `BACKEND_JWT_SECRET` ve bootstrap admin parolası `change-me` yer
+tutucularıyla gelir. Backend, üretim benzeri `SENTINEL_ENV`'de JWT sırrı hâlâ varsayılanken
+başlamayı reddeder.
+
+## Proje durumu
+
+Sistem tamamen uygulanmıştır — beş ajanlı iş akışı, kontrol paneli, ML hattı ve Docker Compose
+— artı altı üretim seviyesi sertleştirme yeteneği. Riskli olanlar **varsayılan kapalıdır**:
+JWT auth + RBAC (açık), Redis hız limiti (açık), gerçek-zamanlı WebSocket yayını (açık), model
+drift izleme (açık), canlı sensör (**kapalı — lab-only**), lab-only gerçek müdahale
+(**kapalı — simüle**). `make bootstrap` taze bir klonu tek komutla çalışır demoya getirir;
+varsayılan yapılandırma tamamen simüledir ve paket yakalayamaz ya da gerçek bir firewall'a
+dokunamaz.
+
+## Canlı sensör (opsiyonel, lab-only)
+
+Çevrimdışı CSV replay'in ötesinde, opsiyonel bir **log-okuyucu sensör** (`sensor/`), Zeek veya
+Suricata'nın zaten ürettiği loglardan *gerçek* akış metadatasını `POST /api/v1/ingest/flows`
+ucuna besleyebilir. Yalnız akış **metadatası** okur — NIC bağlama yok, paket yakalama yok,
+payload yok — ve **varsayılan kapalıdır**. Açıkça etkinleştirilip yetkili lab alt ağlarına
+kapsamlandırılmadan çalışmaz. **Yalnızca sahibi olduğun veya izlemeye açıkça yetkili olduğun
+ağlarda kullan.** Tam kılavuz: [docs/LIVE_SENSOR.md](docs/LIVE_SENSOR.md).
+
+## Etik
+
+Müdahale aksiyonları **varsayılan olarak simüledir**. Bir PostgreSQL `CHECK`
+(`ck_response_actions_simulated_unless_lab`) gerçek (simüle-olmayan) bir satırı açık `LAB`
+modu dışında *yapısal olarak imkânsız* kılar. LAB modu (opsiyonel, varsayılan kapalı) yalnızca
+yetkili bir lab ağında **izin listesindeki, analist onaylı, geri alınabilir** bir etkiye izin
+verir — asla üretim veya dış hedeflere değil; bkz. [docs/LAB_RESPONSE.md](docs/LAB_RESPONSE.md).
+Opsiyonel canlı sensör yalnız akış **metadatası** okur (asla payload), varsayılan kapalıdır ve
+yalnız açıkça yetkili lab alt ağlarına karşı çalışır. Bkz. [docs/ETHICS.md](docs/ETHICS.md).
