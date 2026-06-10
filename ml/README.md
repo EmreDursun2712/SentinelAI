@@ -24,7 +24,7 @@ ml/
 ├── pyproject.toml
 ├── __init__.py
 ├── feature_list.py    canonical column normalization + exclusion set
-├── data_loader.py     CSV loading (file or directory)
+├── data_loader.py     CSV/Parquet loading (file or directory)
 ├── preprocess.py      cleaning, feature selection, X/y construction
 ├── pipeline.py        sklearn Pipeline factory (RF | GB)
 ├── metrics.py         precision/recall/F1 + confusion matrix
