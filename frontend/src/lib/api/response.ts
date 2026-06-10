@@ -3,7 +3,7 @@ import type {
   ResponseActionType,
   ResponseStatus,
 } from "@/lib/types";
-import { qs, request } from "./client";
+import { type ListResult, qs, request, requestList } from "./client";
 
 export interface ListActionsParams {
   alert_id?: number;
@@ -17,6 +17,14 @@ export function listResponseActions(
   params: ListActionsParams = {},
 ): Promise<ResponseActionOut[]> {
   return request<ResponseActionOut[]>(`/response${qs(params)}`);
+}
+
+/** Like {@link listResponseActions} but also returns the unpaginated total
+ * (from the `X-Total-Count` header) so the UI can show "first N of M". */
+export function listResponseActionsPage(
+  params: ListActionsParams = {},
+): Promise<ListResult<ResponseActionOut>> {
+  return requestList<ResponseActionOut>(`/response${qs(params)}`);
 }
 
 export function listPendingActions(limit = 100): Promise<ResponseActionOut[]> {

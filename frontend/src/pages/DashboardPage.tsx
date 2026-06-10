@@ -84,7 +84,7 @@ export default function DashboardPage() {
           label="Critical alerts"
           value={loading ? "…" : (ov?.critical_alerts ?? 0).toLocaleString()}
           tone={ov && ov.critical_alerts > 0 ? "danger" : "default"}
-          hint={`+${ov?.high_alerts ?? 0} HIGH severity`}
+          hint={`${(ov?.high_alerts ?? 0).toLocaleString()} HIGH severity (separate)`}
         />
       </div>
 

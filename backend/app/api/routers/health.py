@@ -26,6 +26,23 @@ from app.services.model_registry import get_model_registry
 router = APIRouter()
 
 
+@router.get("/", include_in_schema=False)
+async def root() -> dict[str, Any]:
+    """Friendly index so hitting the API host directly isn't a bare 404.
+
+    The backend is API-only; this just points humans at the docs + probes.
+    """
+    return {
+        "name": "SentinelAI API",
+        "version": __version__,
+        "docs": "/docs",
+        "openapi": "/api/v1/openapi.json",
+        "health": "/health",
+        "readyz": "/readyz",
+        "api_base": "/api/v1",
+    }
+
+
 @router.get("/health", status_code=status.HTTP_200_OK)
 async def health() -> dict[str, str]:
     """Liveness: cheap, dependency-free."""

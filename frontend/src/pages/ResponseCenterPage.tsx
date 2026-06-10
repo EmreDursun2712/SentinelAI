@@ -13,6 +13,7 @@ import { Select } from "@/components/ui/Select";
 import { Spinner } from "@/components/ui/Spinner";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@/components/ui/Table";
 import { dashboardApi, responseApi } from "@/lib/api";
+import type { ListResult } from "@/lib/api/client";
 import { errorMessage } from "@/lib/api/errors";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { useConfirm } from "@/lib/confirm/ConfirmProvider";
@@ -66,13 +67,14 @@ export default function ResponseCenterPage() {
     refetchInterval: useLiveInterval(30_000),
   });
 
+  const PENDING_PAGE = 100;
   const pendingQ = useQuery({
     queryKey: ["response", "pending", actionFilter],
     queryFn: () =>
-      responseApi.listResponseActions({
+      responseApi.listResponseActionsPage({
         status: "PENDING",
         action_type: actionFilter || undefined,
-        limit: 100,
+        limit: PENDING_PAGE,
       }),
     refetchInterval: useLiveInterval(10_000),
   });
@@ -87,18 +89,29 @@ export default function ResponseCenterPage() {
     refetchInterval: useLiveInterval(30_000),
   });
 
-  // Optimistically drop a decided action from every cached pending list, with a
-  // snapshot so onError can restore server truth.
+  // Optimistically drop a decided action from every cached pending list (and
+  // decrement its total), with a snapshot so onError can restore server truth.
   const dropFromPending = async (id: number) => {
     await qc.cancelQueries({ queryKey: ["response", "pending"] });
-    const snapshots = qc.getQueriesData<ResponseActionOut[]>({ queryKey: ["response", "pending"] });
+    const snapshots = qc.getQueriesData<ListResult<ResponseActionOut>>({
+      queryKey: ["response", "pending"],
+    });
     for (const [key, data] of snapshots) {
-      if (data) qc.setQueryData(key, data.filter((a) => a.id !== id));
+      if (!data) continue;
+      const items = data.items.filter((a) => a.id !== id);
+      qc.setQueryData(key, {
+        items,
+        total: items.length < data.items.length ? Math.max(0, data.total - 1) : data.total,
+      });
     }
     return { snapshots };
   };
 
-  const restorePending = (ctx: { snapshots?: [readonly unknown[], ResponseActionOut[] | undefined][] } | undefined) => {
+  const restorePending = (
+    ctx:
+      | { snapshots?: [readonly unknown[], ListResult<ResponseActionOut> | undefined][] }
+      | undefined,
+  ) => {
     ctx?.snapshots?.forEach(([key, data]) => qc.setQueryData(key, data));
   };
 
@@ -199,7 +212,9 @@ export default function ResponseCenterPage() {
     return { autoToday, approvedToday, rejectedToday };
   }, [recentQ.data]);
 
-  const pendingCount = overviewQ.data?.pending_actions ?? pendingQ.data?.length ?? 0;
+  const pendingItems = pendingQ.data?.items ?? [];
+  const pendingTotal = pendingQ.data?.total ?? 0;
+  const pendingCount = overviewQ.data?.pending_actions ?? pendingTotal;
 
   return (
     <section className="space-y-6">
@@ -271,7 +286,9 @@ export default function ResponseCenterPage() {
           <div>
             <h3 className="text-sm font-semibold text-slate-200">Pending queue</h3>
             <p className="text-xs text-slate-500">
-              {pendingQ.data?.length ?? 0} action(s) awaiting decision
+              {pendingTotal} action(s) awaiting decision
+              {pendingItems.length < pendingTotal &&
+                ` · showing first ${pendingItems.length}`}
               {actionFilter && ` · filtered to ${actionFilter}`}.
             </p>
           </div>
@@ -283,14 +300,14 @@ export default function ResponseCenterPage() {
           </div>
         ) : pendingQ.isError ? (
           <ErrorState description="Failed to load pending actions." />
-        ) : pendingQ.data?.length === 0 ? (
+        ) : pendingItems.length === 0 ? (
           <EmptyState
             title="No pending actions"
             description="High-severity recommendations auto-executed; the rest were already resolved."
           />
         ) : (
           <ul className="divide-y divide-slate-800/70">
-            {pendingQ.data!.map((a) => (
+            {pendingItems.map((a) => (
               <PendingActionRow
                 key={a.id}
                 action={a}

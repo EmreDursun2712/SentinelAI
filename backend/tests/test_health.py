@@ -16,6 +16,17 @@ async def test_health_always_ok(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_root_index_points_at_docs(client: AsyncClient) -> None:
+    # Hitting the API host directly returns a friendly index, not a bare 404.
+    response = await client.get("/")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["name"] == "SentinelAI API"
+    assert body["docs"] == "/docs"
+    assert body["health"] == "/health"
+
+
+@pytest.mark.asyncio
 async def test_readyz_reports_structured_dependency_checks(client: AsyncClient) -> None:
     response = await client.get("/readyz")
     assert response.status_code in (200, 503)
@@ -24,8 +35,9 @@ async def test_readyz_reports_structured_dependency_checks(client: AsyncClient) 
     checks = body["checks"]
     assert checks["database"]["status"] in ("ok", "down")
     assert checks["database"]["required"] is True
-    # Redis + model are always reported (model is informational / not required).
+    # Redis, task queue, and model are always reported (informational / not required).
     assert "redis" in checks
+    assert "queue" in checks
     assert checks["model"]["status"] in ("loaded", "unavailable")
     assert checks["model"]["required"] is False
 

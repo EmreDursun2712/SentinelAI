@@ -25,6 +25,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
     },
     responseApi: {
       listResponseActions: vi.fn().mockResolvedValue([]),
+      listResponseActionsPage: vi.fn().mockResolvedValue({ items: [], total: 0 }),
     },
   };
 });
