@@ -6,6 +6,7 @@ from fastapi import APIRouter
 from sqlalchemy import func, select
 
 from app.api.deps import SessionDep
+from app.core.config import get_settings
 from app.models import Alert, NetworkEvent, ResponseAction
 from app.models.enums import AlertStatus, ResponseStatus, Severity
 from app.schemas.alert import AlertStatsOut, DashboardOverviewOut
@@ -79,4 +80,5 @@ async def dashboard_overview(session: SessionDep) -> DashboardOverviewOut:
         high_alerts=high_alerts,
         pending_actions=pending_actions,
         alerts=alerts,
+        demo_reset_enabled=get_settings().demo_reset_enabled,
     )

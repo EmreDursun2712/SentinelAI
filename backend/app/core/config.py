@@ -140,6 +140,12 @@ class Settings(BaseSettings):
     response_max_block_minutes: int = 60
     response_require_approval: bool = True
 
+    # Demo helper. When true, an ADMIN-only endpoint can wipe operational data
+    # (events, alerts, actions, reports, drift) so the dashboard returns to zero
+    # between live demos. Users/sessions and the trained model are preserved.
+    # Off by default — the endpoint 404s and the dashboard hides the button.
+    demo_reset_enabled: bool = False
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]

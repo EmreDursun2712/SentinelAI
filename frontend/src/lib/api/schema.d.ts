@@ -4,6 +4,30 @@
  */
 
 export interface paths {
+    "/api/v1/admin/reset-demo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset Demo
+         * @description Wipe events/alerts/actions/reports/drift so the dashboard returns to zero.
+         *
+         *     Preserves users, sessions, and the trained model. ADMIN-only; 404 unless the
+         *     demo-reset feature is explicitly enabled. The session is opened lazily so the
+         *     feature gate is evaluated before any database access.
+         */
+        post: operations["reset_demo_api_v1_admin_reset_demo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/alerts": {
         parameters: {
             query?: never;
@@ -1603,6 +1627,11 @@ export interface components {
             alerts: components["schemas"]["AlertStatsOut"];
             /** Critical Alerts */
             critical_alerts: number;
+            /**
+             * Demo Reset Enabled
+             * @default false
+             */
+            demo_reset_enabled: boolean;
             /** High Alerts */
             high_alerts: number;
             /** Open Alerts */
@@ -1613,6 +1642,18 @@ export interface components {
             suspicious_events: number;
             /** Total Events */
             total_events: number;
+        };
+        /**
+         * DemoResetResponse
+         * @description Result of a demo reset: how many rows each table gave up.
+         */
+        DemoResetResponse: {
+            /** Cleared */
+            cleared: {
+                [key: string]: number;
+            };
+            /** Reset */
+            reset: boolean;
         };
         /** DetectionRunTaskRequest */
         DetectionRunTaskRequest: {
@@ -2795,6 +2836,39 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    reset_demo_api_v1_admin_reset_demo_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                sentinelai_access?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DemoResetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_alerts_api_v1_alerts_get: {
         parameters: {
             query?: {

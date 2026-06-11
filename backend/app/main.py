@@ -14,6 +14,7 @@ from app import __version__
 from app.agents.runtime import register_agents
 from app.api.deps import enforce_rbac, rate_limit
 from app.api.routers import (
+    admin,
     alerts,
     auth,
     dashboard,
@@ -346,6 +347,7 @@ def create_app() -> FastAPI:
     )
     app.include_router(models.router, prefix=API_V1_PREFIX, tags=["models"], dependencies=protected)
     app.include_router(tasks.router, prefix=API_V1_PREFIX, tags=["tasks"], dependencies=protected)
+    app.include_router(admin.router, prefix=API_V1_PREFIX, tags=["admin"], dependencies=protected)
     # NOTE: the WebSocket /stream is an echo stub today and is secured in the
     # WebSocket-broadcasting etap (token via query param). It carries no data.
     app.include_router(stream.router, prefix=API_V1_PREFIX, tags=["stream"])

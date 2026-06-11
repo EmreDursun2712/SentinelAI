@@ -7,6 +7,7 @@
 
 export { ApiError, API_BASE, API_ROOT } from "./client";
 
+import * as adminApi from "./admin";
 import * as alertsApi from "./alerts";
 import * as authApi from "./auth";
 import * as dashboardApi from "./dashboard";
@@ -19,7 +20,7 @@ import * as reportsApi from "./reports";
 import * as responseApi from "./response";
 import * as tasksApi from "./tasks";
 
-export { alertsApi, authApi, dashboardApi, detectionApi, healthApi, ingestionApi, investigationApi, modelsApi, reportsApi, responseApi, tasksApi };
+export { adminApi, alertsApi, authApi, dashboardApi, detectionApi, healthApi, ingestionApi, investigationApi, modelsApi, reportsApi, responseApi, tasksApi };
 
 // Convenience re-exports.
 export { health, readyz } from "./health";

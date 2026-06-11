@@ -240,6 +240,9 @@ export interface DashboardOverview {
   high_alerts: number;
   pending_actions: number;
   alerts: AlertStats;
+  /** Whether the ADMIN-only demo-reset endpoint is enabled (drives the
+   * "Reset demo data" button on the dashboard). Off in production. */
+  demo_reset_enabled?: boolean;
 }
 
 // ----- Triage / disposition -----------------------------------------------

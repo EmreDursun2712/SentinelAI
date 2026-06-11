@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 
 import { ModelHealthPanel } from "@/components/dashboard/ModelHealthPanel";
@@ -16,13 +16,20 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Spinner } from "@/components/ui/Spinner";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@/components/ui/Table";
-import { alertsApi, dashboardApi, detectionApi } from "@/lib/api";
+import { adminApi, alertsApi, dashboardApi, detectionApi } from "@/lib/api";
+import { errorMessage } from "@/lib/api/errors";
+import { useConfirm } from "@/lib/confirm/ConfirmProvider";
+import { useToast } from "@/lib/toast/ToastContext";
 import { useLiveInterval } from "@/lib/stream/StreamProvider";
 import { formatRelative } from "@/lib/format";
 
 const TIMESERIES_HOURS = 24;
 
 export default function DashboardPage() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const confirm = useConfirm();
+
   const overviewQ = useQuery({
     queryKey: ["dashboard", "overview"],
     queryFn: dashboardApi.getOverview,
@@ -49,11 +56,49 @@ export default function DashboardPage() {
   const isEmpty =
     !loading && (ov?.total_events ?? 0) === 0 && (ov?.alerts.total ?? 0) === 0;
 
+  // Demo helper: wipe operational data so the dashboard returns to zero between
+  // live demos. Only surfaced when the backend reports the feature is enabled.
+  const resetMut = useMutation({
+    mutationFn: adminApi.resetDemo,
+    onSuccess: (res) => {
+      const total = Object.values(res.cleared).reduce((a, b) => a + b, 0);
+      qc.invalidateQueries(); // refetch everything → all panels return to zero
+      toast.success(`Demo data reset — ${total.toLocaleString()} row(s) cleared.`);
+    },
+    onError: (err) => toast.error(errorMessage(err, "Could not reset demo data.")),
+  });
+
+  async function handleReset() {
+    const { confirmed } = await confirm({
+      title: "Reset demo data?",
+      tone: "danger",
+      confirmLabel: "Reset to zero",
+      message:
+        "Wipes all events, alerts, response actions, reports, and drift snapshots so " +
+        "the dashboard returns to zero. User accounts and the trained model are kept. " +
+        "This cannot be undone.",
+    });
+    if (confirmed) resetMut.mutate();
+  }
+
   return (
     <section className="space-y-6">
       <PageHeader
         title="Dashboard"
         description="Live SOC overview. Detections, triage, response, and reporting at a glance."
+        actions={
+          ov?.demo_reset_enabled ? (
+            <Button
+              variant="danger"
+              size="sm"
+              disabled={resetMut.isPending}
+              onClick={handleReset}
+            >
+              {resetMut.isPending && <Spinner className="h-3 w-3" />}
+              Reset demo data
+            </Button>
+          ) : undefined
+        }
       />
 
       {isEmpty && <FirstRunBanner />}

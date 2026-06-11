@@ -128,3 +128,6 @@ class DashboardOverviewOut(BaseModel):
     high_alerts: int
     pending_actions: int
     alerts: AlertStatsOut
+    # Whether the ADMIN-only demo-reset endpoint is enabled (drives the
+    # dashboard's "Reset demo data" button visibility). Off in production.
+    demo_reset_enabled: bool = False

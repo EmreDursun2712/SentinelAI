@@ -1262,6 +1262,11 @@
             "title": "Critical Alerts",
             "type": "integer"
           },
+          "demo_reset_enabled": {
+            "default": false,
+            "title": "Demo Reset Enabled",
+            "type": "boolean"
+          },
           "high_alerts": {
             "title": "High Alerts",
             "type": "integer"
@@ -1293,6 +1298,28 @@
           "alerts"
         ],
         "title": "DashboardOverviewOut",
+        "type": "object"
+      },
+      "DemoResetResponse": {
+        "description": "Result of a demo reset: how many rows each table gave up.",
+        "properties": {
+          "cleared": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Cleared",
+            "type": "object"
+          },
+          "reset": {
+            "title": "Reset",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "reset",
+          "cleared"
+        ],
+        "title": "DemoResetResponse",
         "type": "object"
       },
       "DetectionRunTaskRequest": {
@@ -4512,6 +4539,72 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/admin/reset-demo": {
+      "post": {
+        "description": "Wipe events/alerts/actions/reports/drift so the dashboard returns to zero.\n\nPreserves users, sessions, and the trained model. ADMIN-only; 404 unless the\ndemo-reset feature is explicitly enabled. The session is opened lazily so the\nfeature gate is evaluated before any database access.",
+        "operationId": "reset_demo_api_v1_admin_reset_demo_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "sentinelai_access",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sentinelai Access"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DemoResetResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reset Demo",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/api/v1/alerts": {
       "get": {
         "operationId": "list_alerts_api_v1_alerts_get",
