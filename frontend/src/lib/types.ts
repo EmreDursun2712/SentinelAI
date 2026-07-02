@@ -170,6 +170,60 @@ export interface Alert {
   updated_at: string;
 }
 
+export interface AlertCluster {
+  correlation_key: string;
+  src_ip: string;
+  prediction: string;
+  count: number;
+  open_count: number;
+  first_seen: string;
+  last_seen: string;
+  activity_span_seconds: number;
+  max_severity: Severity | null;
+  max_priority: number | null;
+  distinct_destinations: number;
+  alert_ids: number[];
+}
+
+export interface AlertClusterList {
+  window_hours: number;
+  total_clusters: number;
+  items: AlertCluster[];
+}
+
+// ----- Host attack timeline (kill-chain) ----------------------------------
+
+export type TimelineKind = "flow" | "alert" | "triage" | "response";
+
+export interface TimelineEntry {
+  timestamp: string;
+  kind: TimelineKind;
+  phase: string;
+  title: string;
+  severity: Severity | null;
+  prediction: string | null;
+  label: string | null;
+  alert_id: number | null;
+}
+
+export interface HostTimelineSummary {
+  ip: string;
+  event_count: number;
+  alert_count: number;
+  response_count: number;
+  families: string[];
+  max_severity: Severity | null;
+  first_seen: string | null;
+  last_seen: string | null;
+}
+
+export interface HostTimeline {
+  ip: string;
+  window_hours: number;
+  summary: HostTimelineSummary;
+  items: TimelineEntry[];
+}
+
 export interface AgentDecision {
   id: number;
   agent: AgentName;
@@ -278,9 +332,26 @@ export interface ModelInfo {
   db_id?: number | null;
   is_active?: boolean | null;
   threshold?: number | null;
+  class_thresholds?: Record<string, number>;
   benign_label?: string | null;
   expected_feature_coverage?: number | null;
   calibrated?: boolean | null;
+  calibration?: CalibrationInfo | null;
+  feature_set?: string | null;
+  profile?: string | null;
+}
+
+export interface ReliabilityCurve {
+  mean_confidence: number[];
+  accuracy: number[];
+  count: number[];
+}
+
+export interface CalibrationInfo {
+  method: string;
+  calibrated: boolean;
+  brier_score: number;
+  reliability_curve: ReliabilityCurve;
 }
 
 // ----- Model registry / lifecycle -----------------------------------------
@@ -324,6 +395,48 @@ export interface ModelActivationList {
   items: ModelActivation[];
 }
 
+export interface ClassMetrics {
+  precision: number;
+  recall: number;
+  f1: number;
+  support: number;
+}
+
+export interface LabeledEval {
+  labeled_count: number;
+  accuracy: number;
+  macro_f1: number;
+  class_labels: string[];
+  per_class: Record<string, ClassMetrics>;
+}
+
+export type PromoteDecision = "promote" | "hold" | "insufficient_labels";
+
+export interface PromoteRecommendation {
+  decision: PromoteDecision;
+  reason: string;
+  macro_f1_delta: number | null;
+  candidate_macro_f1?: number;
+  active_macro_f1?: number;
+  min_samples: number;
+  min_labeled: number;
+  f1_margin: number;
+}
+
+export interface ShadowMetrics {
+  sample_count: number;
+  agreement_rate: number | null;
+  disagreements?: number;
+  candidate_label_distribution?: Record<string, number>;
+  active_label_distribution?: Record<string, number>;
+  candidate_mean_confidence?: number | null;
+  active_mean_confidence?: number | null;
+  mean_confidence_delta?: number | null;
+  candidate_eval?: LabeledEval | null;
+  active_eval?: LabeledEval | null;
+  recommendation?: PromoteRecommendation;
+}
+
 export interface ShadowEval {
   id: number;
   candidate_version_id: number | null;
@@ -332,9 +445,16 @@ export interface ShadowEval {
   window_end: string;
   sample_count: number;
   agreement_rate: number | null;
-  metrics: Record<string, unknown>;
+  metrics: ShadowMetrics;
+  recommendation: PromoteRecommendation | null;
   created_by: string | null;
   created_at: string;
+}
+
+export interface PromoteResult {
+  promoted: boolean;
+  active_version_id: number | null;
+  evaluation: ShadowEval;
 }
 
 export interface DetectionRunSummary {
@@ -440,6 +560,21 @@ export interface FeatureImportanceItem {
   importance: number;
 }
 
+export interface FeatureContributionItem {
+  feature: string;
+  value: number | null;
+  contribution: number;
+}
+
+export interface PredictionExplanation {
+  method: string;
+  explained_class: string;
+  base_value: number;
+  contribution_sum: number;
+  model_probability: number | null;
+  contributions: FeatureContributionItem[];
+}
+
 export interface InvestigationPacket {
   alert_id: number;
   generated_at: string;
@@ -452,6 +587,7 @@ export interface InvestigationPacket {
   related_events: RelatedEventOut[];
   timeline: TimelineItem[];
   feature_importance: FeatureImportanceItem[];
+  explanation?: PredictionExplanation | null;
   model_name?: string | null;
   model_version?: string | null;
   truncated: boolean;
@@ -549,4 +685,25 @@ export interface ReadyzResponse {
     queue: DependencyCheck;
     model: DependencyCheck;
   };
+}
+
+// ----- Audit trail --------------------------------------------------------
+
+export type AuditCategory = "auth" | "model" | "analyst" | "response";
+
+export interface AuditEntry {
+  id: string;
+  timestamp: string;
+  category: AuditCategory;
+  actor: string | null;
+  action: string;
+  target: string | null;
+  detail: string | null;
+}
+
+export interface AuditList {
+  items: AuditEntry[];
+  has_more: boolean;
+  limit: number;
+  offset: number;
 }

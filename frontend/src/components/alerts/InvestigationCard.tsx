@@ -2,7 +2,7 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/Ca
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@/components/ui/Table";
 import { formatDateTime, formatDuration } from "@/lib/format";
-import type { InvestigationPacket } from "@/lib/types";
+import type { PredictionExplanation as Explanation, InvestigationPacket } from "@/lib/types";
 
 interface InvestigationCardProps {
   packet: InvestigationPacket | null;
@@ -60,6 +60,10 @@ export function InvestigationCard({ packet }: InvestigationCardProps) {
         <Stat label="Activity span" value={formatDuration(s.activity_span_seconds)} />
       </div>
 
+      {packet.explanation && packet.explanation.contributions.length > 0 && (
+        <ExplanationSection explanation={packet.explanation} />
+      )}
+
       {packet.feature_importance.length > 0 && (
         <details className="mt-4 border-t border-slate-800 pt-3 text-xs text-slate-400">
           <summary className="cursor-pointer text-slate-300">
@@ -96,6 +100,76 @@ function Stat({ label, value }: { label: string; value: React.ReactNode }) {
         {label}
       </p>
       <p className="mt-0.5 text-sm font-semibold text-slate-200">{value}</p>
+    </div>
+  );
+}
+
+/**
+ * Local, per-prediction attribution: signed bars showing how much each feature
+ * pushed the model toward (green, right) or away from (rose, left) the predicted
+ * class for THIS alert. Exact tree-path (TreeSHAP-style) decomposition:
+ * base_value + Σ contributions == the forest's probability for the class.
+ */
+function ExplanationSection({ explanation }: { explanation: Explanation }) {
+  const items = explanation.contributions;
+  const maxAbs = Math.max(...items.map((c) => Math.abs(c.contribution)), 1e-9);
+  const prob = explanation.model_probability;
+
+  return (
+    <div className="mt-4 border-t border-slate-800 pt-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold text-slate-300">
+          Why this alert →{" "}
+          <span className="font-mono text-emerald-300">{explanation.explained_class}</span>
+        </p>
+        <span className="text-[10px] text-slate-500">
+          {prob != null && <>model p={prob.toFixed(3)} · </>}
+          base {explanation.base_value.toFixed(3)}
+        </span>
+      </div>
+      <p className="mt-0.5 text-[11px] text-slate-500">
+        Per-prediction feature contributions (tree-path / SHAP-style). Green pushes
+        toward the class, rose away.
+      </p>
+
+      <ul className="mt-2 space-y-1">
+        {items.map((c) => {
+          const positive = c.contribution >= 0;
+          const width = `${(Math.abs(c.contribution) / maxAbs) * 100}%`;
+          return (
+            <li key={c.feature} className="flex items-center gap-2 text-xs">
+              <span className="w-44 shrink-0 truncate font-mono text-slate-300" title={c.feature}>
+                {c.feature}
+              </span>
+              {/* Diverging bar: left half = negative, right half = positive. */}
+              <span className="flex h-4 flex-1 items-center">
+                <span className="flex w-1/2 justify-end">
+                  {!positive && (
+                    <span className="h-2.5 rounded-l bg-rose-500/70" style={{ width }} />
+                  )}
+                </span>
+                <span className="h-3 w-px bg-slate-700" />
+                <span className="flex w-1/2 justify-start">
+                  {positive && (
+                    <span className="h-2.5 rounded-r bg-emerald-500/70" style={{ width }} />
+                  )}
+                </span>
+              </span>
+              <span
+                className={`w-16 shrink-0 text-right font-mono ${
+                  positive ? "text-emerald-300" : "text-rose-300"
+                }`}
+              >
+                {positive ? "+" : ""}
+                {c.contribution.toFixed(4)}
+              </span>
+              <span className="w-20 shrink-0 truncate text-right text-slate-500" title={String(c.value)}>
+                {c.value == null ? "—" : c.value}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

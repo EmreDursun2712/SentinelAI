@@ -29,7 +29,37 @@ python -m ml.train --data ml/data/cic-ids-2017 --profile cic2017
 
 The loader tolerates CIC-IDS2017's quirks (UTF-8 BOM, leading spaces, mixed
 case): headers are normalized to `snake_case` so trained feature names match what
-the backend ingestor produces.
+the backend ingestor produces. Cleaned Kaggle mirrors that rename a few columns
+(`Fwd Packets Length Total`, `Bwd Packets Length Total`, `Avg Packet Size`) are
+folded onto the canonical names via [`COLUMN_ALIASES`](../ml/feature_list.py).
+
+### Demo-compatible canonical model (recommended)
+
+By default the real dataset yields a ~76-feature model that will **not** line up
+with the 21-feature demo CSV. Train with `--feature-set canonical` to pin the
+model to exactly the demo/backend schema, and balance the wildly-skewed classes
+so rare families aren't buried:
+
+```bash
+python -m ml.train \
+    --data ml/data/cic-ids-2017 --profile cic2017 \
+    --feature-set canonical \              # 21-feature demo schema (100% coverage on the sample)
+    --balance cap --max-per-class 20000 \  # cap BENIGN/DoS, keep the rare tail whole
+    --min-class-count 100 \                # drop families too tiny to split (Heartbleed, Infiltration)
+    --calibrate sigmoid                    # realistic confidences + reliability curve
+```
+
+This is the model the demo ships with: real CIC-IDS2017 traffic, serving the
+bundled sample live. The `metadata.json` records `feature_set`, the before/after
+`balance` counts, and any `dropped_classes` so the run is fully auditable.
+
+| Flag                | Effect                                                                    |
+| ------------------- | ------------------------------------------------------------------------- |
+| `--feature-set`     | `full` (every numeric column) or `canonical` (the 21 demo features).      |
+| `--balance`         | `none` or `cap` — downsample majority classes to `--max-per-class`.       |
+| `--max-per-class`   | Row cap per class under `--balance cap` (default `20000`).                |
+| `--min-class-count` | Drop classes with fewer than N rows before splitting (default `0`).       |
+| `--calibrate`       | `sigmoid` / `isotonic` — calibrate served probabilities; records Brier + reliability curve. |
 
 ### Profiles (`--profile`)
 
@@ -62,12 +92,18 @@ The chosen profile is recorded in `metadata.profile`.
 A model is only as good as the feature vector it sees at inference. The pipeline
 guarantees alignment three ways:
 
-1. **One canonical feature set.** The synthetic generator and the bundled sample
-   CSV share the same features. The sample carries CIC-style display headers for
-   **every** trained feature, so a synthetic-trained model gets 100% coverage on
-   it. Regenerate the sample with:
+1. **One canonical feature set.** The synthetic generator, the canonical-feature
+   real model, and the bundled sample CSV all share the same 21 features
+   ([`CANONICAL_FEATURES`](../ml/feature_list.py)). The sample carries CIC-style
+   display headers for **every** trained feature, so both a synthetic- and a
+   real-canonical-trained model get 100% coverage on it. Regenerate the sample:
 
    ```bash
+   # Real flows (what ships — the real model flags them as actual attacks):
+   python -m ml.sample_export --data ml/data/cic-ids-2017 \
+       --output backend/data/samples/sample_flows.csv
+
+   # Or purely synthetic (no dataset download needed):
    python -m ml.synthetic --sample --output backend/data/samples/sample_flows.csv
    ```
 

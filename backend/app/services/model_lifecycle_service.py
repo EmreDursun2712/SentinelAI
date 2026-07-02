@@ -39,6 +39,14 @@ logger = get_logger(__name__)
 SHADOW_DEFAULT_WINDOW_HOURS = 24
 SHADOW_MAX_EVENTS = 5_000
 
+# Auto-promote guardrails: a candidate is only *recommended* for promotion when
+# it was evaluated on enough labelled traffic and clears the active model's
+# macro-F1 by a real margin (not noise). Deliberately conservative — promotion
+# still needs an explicit admin action.
+PROMOTE_MIN_SAMPLES = 50
+PROMOTE_MIN_LABELED = 30
+PROMOTE_F1_MARGIN = 0.02
+
 
 # ---------------------------------------------------------------------------
 # Disk discovery.
@@ -310,6 +318,107 @@ def compare_predictions(
     }
 
 
+def evaluate_against_labels(
+    pred_labels: list[str], true_labels: list[str | None]
+) -> dict[str, Any] | None:
+    """Per-class + macro metrics for one model's predictions vs. ground truth.
+
+    Ground truth comes from ``network_events.label`` (populated by CSV replay of
+    the labelled CIC-IDS2017 sample). Rows without a label are ignored. Macro-F1
+    is averaged over the classes actually present in the labelled set, so a model
+    isn't penalized for families that never appeared in the window. Returns
+    ``None`` when there is nothing labelled to score.
+    """
+    from sklearn.metrics import accuracy_score, precision_recall_fscore_support
+
+    pairs = [(p, t) for p, t in zip(pred_labels, true_labels, strict=True) if t]
+    if not pairs:
+        return None
+    preds = [p for p, _ in pairs]
+    truth = [t for _, t in pairs]
+    class_labels = sorted(set(truth))  # evaluable classes = those with ground truth
+
+    precision, recall, f1, support = precision_recall_fscore_support(
+        truth, preds, labels=class_labels, zero_division=0
+    )
+    per_class = {
+        label: {
+            "precision": round(float(precision[i]), 4),
+            "recall": round(float(recall[i]), 4),
+            "f1": round(float(f1[i]), 4),
+            "support": int(support[i]),
+        }
+        for i, label in enumerate(class_labels)
+    }
+    macro_f1 = round(float(np.mean(f1)) if len(f1) else 0.0, 4)
+    return {
+        "labeled_count": len(pairs),
+        "accuracy": round(float(accuracy_score(truth, preds)), 4),
+        "macro_f1": macro_f1,
+        "class_labels": class_labels,
+        "per_class": per_class,
+    }
+
+
+def build_recommendation(
+    candidate_eval: dict[str, Any] | None,
+    active_eval: dict[str, Any] | None,
+    *,
+    sample_count: int,
+) -> dict[str, Any]:
+    """Decide whether the candidate is worth promoting (advisory only).
+
+    ``decision`` is one of ``promote`` / ``hold`` / ``insufficient_labels``. The
+    reason string is analyst-facing; ``macro_f1_delta`` drives the call.
+    """
+    base = {
+        "min_samples": PROMOTE_MIN_SAMPLES,
+        "min_labeled": PROMOTE_MIN_LABELED,
+        "f1_margin": PROMOTE_F1_MARGIN,
+    }
+    if candidate_eval is None or active_eval is None:
+        return {
+            **base,
+            "decision": "insufficient_labels",
+            "macro_f1_delta": None,
+            "reason": "No ground-truth labels in the window — cannot score accuracy.",
+        }
+
+    labeled = candidate_eval["labeled_count"]
+    delta = round(candidate_eval["macro_f1"] - active_eval["macro_f1"], 4)
+    common = {
+        **base,
+        "macro_f1_delta": delta,
+        "candidate_macro_f1": candidate_eval["macro_f1"],
+        "active_macro_f1": active_eval["macro_f1"],
+    }
+    if sample_count < PROMOTE_MIN_SAMPLES or labeled < PROMOTE_MIN_LABELED:
+        return {
+            **common,
+            "decision": "hold",
+            "reason": (
+                f"Only {labeled} labelled / {sample_count} total sample(s) — need "
+                f"≥{PROMOTE_MIN_LABELED} labelled and ≥{PROMOTE_MIN_SAMPLES} total."
+            ),
+        }
+    if delta >= PROMOTE_F1_MARGIN:
+        return {
+            **common,
+            "decision": "promote",
+            "reason": (
+                f"Candidate macro-F1 {candidate_eval['macro_f1']:.3f} beats active "
+                f"{active_eval['macro_f1']:.3f} by {delta:+.3f} (≥ {PROMOTE_F1_MARGIN} margin)."
+            ),
+        }
+    return {
+        **common,
+        "decision": "hold",
+        "reason": (
+            f"macro-F1 delta {delta:+.3f} is below the {PROMOTE_F1_MARGIN} promotion margin."
+        ),
+    }
+
+
 async def shadow_eval(
     session: AsyncSession,
     candidate_version_id: int,
@@ -356,11 +465,22 @@ async def shadow_eval(
         raise AppError("No recent events to shadow-evaluate against.")
 
     feature_dicts = [dict(ev.features or {}) for ev in events]
+    true_labels = [ev.label for ev in events]
 
     def _run() -> dict[str, Any]:
         cand_labels, cand_confs = _top_labels(candidate_bundle, feature_dicts)
         act_labels, act_confs = _top_labels(active_bundle, feature_dicts)
-        return compare_predictions(cand_labels, cand_confs, act_labels, act_confs)
+        metrics = compare_predictions(cand_labels, cand_confs, act_labels, act_confs)
+        # Ground-truth-aware A/B: per-class precision/recall/F1 for each model
+        # plus a promote/hold recommendation, when the window carries labels.
+        candidate_eval = evaluate_against_labels(cand_labels, true_labels)
+        active_eval = evaluate_against_labels(act_labels, true_labels)
+        metrics["candidate_eval"] = candidate_eval
+        metrics["active_eval"] = active_eval
+        metrics["recommendation"] = build_recommendation(
+            candidate_eval, active_eval, sample_count=metrics.get("sample_count", 0)
+        )
+        return metrics
 
     metrics = await asyncio.to_thread(_run)
 
@@ -384,5 +504,43 @@ async def shadow_eval(
         active=active_row.version if active_row else None,
         agreement_rate=metrics.get("agreement_rate"),
         sample_count=metrics.get("sample_count"),
+        recommendation=(metrics.get("recommendation") or {}).get("decision"),
     )
     return snapshot
+
+
+async def promote_if_better(
+    session: AsyncSession,
+    candidate_version_id: int,
+    *,
+    window_hours: int = SHADOW_DEFAULT_WINDOW_HOURS,
+    actor: str | None = None,
+) -> tuple[ModelShadowEval, bool, ModelVersion | None]:
+    """Shadow-eval a candidate and activate it **iff** the eval recommends it.
+
+    Returns ``(snapshot, promoted, active_version)``. Promotion is a real
+    activation (audited, reloads memory) and only happens when the recommendation
+    decision is ``promote``; otherwise the active model is left untouched. The
+    candidate being already active is treated as a no-op promotion.
+    """
+    snapshot = await shadow_eval(
+        session, candidate_version_id, window_hours=window_hours, actor=actor
+    )
+    recommendation = (snapshot.metrics or {}).get("recommendation") or {}
+
+    if recommendation.get("decision") != "promote":
+        return snapshot, False, await get_active_version(session)
+
+    version, _loaded = await activate_version(
+        session,
+        candidate_version_id,
+        actor=actor,
+        reason="auto-promote: shadow eval recommended (macro-F1 gain)",
+    )
+    logger.info(
+        "model.auto_promoted",
+        candidate=version.version,
+        macro_f1_delta=recommendation.get("macro_f1_delta"),
+        actor=actor,
+    )
+    return snapshot, True, version

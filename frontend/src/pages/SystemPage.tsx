@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { RefreshIcon } from "@/components/icons";
 import { ModelVersionsPanel } from "@/components/models/ModelVersionsPanel";
+import { ShadowEvalPanel } from "@/components/models/ShadowEvalPanel";
 import { TasksPanel } from "@/components/tasks/TasksPanel";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -131,8 +132,9 @@ export default function SystemPage() {
             />
           </div>
 
-          <div className="mt-4">
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
             <ModelVersionsPanel />
+            <ShadowEvalPanel />
           </div>
 
           <div className="mt-4">

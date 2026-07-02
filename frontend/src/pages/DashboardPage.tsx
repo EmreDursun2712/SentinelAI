@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 
+import { CalibrationCard } from "@/components/dashboard/CalibrationCard";
 import { ModelHealthPanel } from "@/components/dashboard/ModelHealthPanel";
 import { AlertsOverTimeChart } from "@/components/charts/AlertsOverTimeChart";
 import { SeverityDistributionChart } from "@/components/charts/SeverityDistributionChart";
@@ -133,8 +134,11 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Model health / drift monitoring */}
-      <ModelHealthPanel />
+      {/* Model health / drift monitoring + probability calibration */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ModelHealthPanel />
+        <CalibrationCard />
+      </div>
 
       {/* Charts row 1: stacked area (wide) */}
       <Card padding="md">

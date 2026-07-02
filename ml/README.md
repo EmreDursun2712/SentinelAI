@@ -107,23 +107,49 @@ python -m ml.train --synthetic 50000 --search random --search-iter 30
 
 # Probability calibration — the served confidence (hence the alert threshold
 # decision) then uses calibrated probabilities. Brier score + reliability curve
-# are recorded either way.
+# are recorded either way (surfaced on the dashboard "Calibration" card).
 python -m ml.train --synthetic 50000 --calibrate sigmoid
 ```
 
-## Feature parity (train ↔ serve)
+## Real, demo-compatible model (what ships)
 
-The synthetic generator and the bundled sample CSV share **one canonical feature
-set**, so a synthetic-trained model gets full feature coverage on the sample.
-Regenerate the sample (all features + metadata columns) with:
+Train on real CIC-IDS2017 but pinned to the 21-feature demo schema, with the
+skewed classes balanced and probabilities calibrated:
 
 ```bash
+python -m ml.train --data ml/data/cic-ids-2017 --profile cic2017 \
+    --feature-set canonical --balance cap --max-per-class 20000 \
+    --min-class-count 100 --calibrate sigmoid
+```
+
+- `--feature-set canonical` → `feature_order` is exactly the demo's 21 features,
+  so the real model serves the bundled sample with 100% coverage.
+- `--balance cap` downsamples majority classes to `--max-per-class` while keeping
+  every rare-class row; `--min-class-count` drops families too tiny to split.
+- `metadata.json` records `feature_set`, before/after `balance` counts, and
+  `dropped_classes`. Full guide: [docs/ML_TRAINING.md](../docs/ML_TRAINING.md).
+
+## Feature parity (train ↔ serve)
+
+The synthetic generator, the canonical real model, and the bundled sample CSV
+share **one canonical 21-feature set** (`CANONICAL_FEATURES`), so both a
+synthetic- and a real-canonical-trained model get full coverage on the sample.
+Regenerate the sample either from real flows (what ships — the real model flags
+them as attacks) or synthetically:
+
+```bash
+# Real CIC-IDS2017 flows, canonical schema + metadata columns:
+python -m ml.sample_export --data ml/data/cic-ids-2017 \
+    --output backend/data/samples/sample_flows.csv
+
+# Or purely synthetic (no dataset download needed):
 python -m ml.synthetic --sample --output backend/data/samples/sample_flows.csv
 ```
 
 Each model records `expected_feature_coverage`; the backend warns (or fails) when
 an inference batch is missing too many trained features. The `ml/tests/` suite
-fails if the sample CSV or generator drifts from the trained feature set.
+fails if the sample CSV, the generator, or the canonical/alias map drifts from
+the trained feature set.
 
 ## Evaluate a saved model
 

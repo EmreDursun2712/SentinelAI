@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from ml.feature_list import normalize_column
+from ml.feature_list import apply_column_aliases, normalize_column
 
 # Extensions we know how to read. Parquet covers the popular cleaned mirrors of
 # CIC-IDS2017 (e.g. Kaggle's ``dhoogla/cicids2017``), which ship .parquet rather
@@ -37,5 +37,7 @@ def _load_file(path: Path) -> pd.DataFrame:
         # CIC-IDS2017 CSVs use UTF-8 with BOM and have stray leading whitespace in
         # column names; ``utf-8-sig`` plus column normalization handles both.
         df = pd.read_csv(path, low_memory=False, encoding="utf-8-sig")
-    df.columns = [normalize_column(c) for c in df.columns]
+    # Normalize headers, then fold mirror-specific column names onto the
+    # canonical schema so canonical-feature training works across CIC mirrors.
+    df.columns = apply_column_aliases([normalize_column(c) for c in df.columns])
     return df

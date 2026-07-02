@@ -31,6 +31,8 @@ from app.schemas.model_registry import (
     ModelActivationOut,
     ModelVersionListOut,
     ModelVersionOut,
+    PromoteRequest,
+    PromoteResult,
     RollbackRequest,
     ShadowEvalOut,
     ShadowEvalRequest,
@@ -134,3 +136,31 @@ async def run_shadow_eval(
         actor=user.username,
     )
     return ShadowEvalOut.model_validate(snapshot)
+
+
+@router.post(
+    "/promote",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(require_admin), _detection_limit],
+)
+async def promote_model(
+    session: SessionDep, request: PromoteRequest, user: ActiveUser
+) -> PromoteResult:
+    """Shadow-eval a candidate and auto-activate it only if the eval recommends it.
+
+    ADMIN-only. Runs the same label-aware A/B comparison as ``/shadow`` and, when
+    the recommendation is ``promote`` (candidate macro-F1 clears the active model
+    by the margin on enough labelled traffic), performs a real, audited
+    activation. Otherwise the active model is left untouched.
+    """
+    snapshot, promoted, active = await lifecycle.promote_if_better(
+        session,
+        request.candidate_version_id,
+        window_hours=request.window_hours,
+        actor=user.username,
+    )
+    return PromoteResult(
+        promoted=promoted,
+        active_version_id=active.id if active else None,
+        evaluation=ShadowEvalOut.model_validate(snapshot),
+    )

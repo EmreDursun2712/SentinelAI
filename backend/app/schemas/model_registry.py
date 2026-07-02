@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class ModelVersionOut(BaseModel):
@@ -67,6 +67,11 @@ class ShadowEvalRequest(BaseModel):
     window_hours: int = Field(default=24, ge=1, le=720)
 
 
+class PromoteRequest(BaseModel):
+    candidate_version_id: int
+    window_hours: int = Field(default=24, ge=1, le=720)
+
+
 class ShadowEvalOut(BaseModel):
     id: int
     candidate_version_id: int | None
@@ -76,7 +81,24 @@ class ShadowEvalOut(BaseModel):
     sample_count: int
     agreement_rate: float | None
     metrics: dict[str, Any] = Field(default_factory=dict)
+    # Lifted out of ``metrics`` for convenience: the promote/hold recommendation
+    # ({"decision": ...}) computed from the label-aware A/B comparison.
+    recommendation: dict[str, Any] | None = None
     created_by: str | None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+    @model_validator(mode="after")
+    def _lift_recommendation(self) -> ShadowEvalOut:
+        if self.recommendation is None and isinstance(self.metrics, dict):
+            self.recommendation = self.metrics.get("recommendation")
+        return self
+
+
+class PromoteResult(BaseModel):
+    """Outcome of an auto-promote attempt: the eval + whether it activated."""
+
+    promoted: bool
+    active_version_id: int | None
+    evaluation: ShadowEvalOut

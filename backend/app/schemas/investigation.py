@@ -91,6 +91,25 @@ class FeatureImportanceItem(BaseModel):
     importance: float
 
 
+class FeatureContributionItem(BaseModel):
+    """One feature's signed push toward the predicted class for this alert."""
+
+    feature: str
+    value: float | None = None  # the flow's (pre-imputation) value; None if missing
+    contribution: float  # >0 pushed toward the class, <0 pushed away
+
+
+class PredictionExplanation(BaseModel):
+    """Local, per-prediction attribution (why *this* alert got *this* class)."""
+
+    method: str  # "tree_path" — exact tree-path (TreeSHAP-style) decomposition
+    explained_class: str
+    base_value: float  # forest's average root probability for the class
+    contribution_sum: float  # base_value + Σ contributions == forest probability
+    model_probability: float | None = None  # the served (calibrated) probability
+    contributions: list[FeatureContributionItem] = Field(default_factory=list)
+
+
 # ---------- top-level packet ----------------------------------------------
 
 
@@ -108,6 +127,9 @@ class InvestigationPacket(BaseModel):
     related_events: list[RelatedEventOut] = Field(default_factory=list)
     timeline: list[TimelineItem] = Field(default_factory=list)
     feature_importance: list[FeatureImportanceItem] = Field(default_factory=list)
+    # Per-prediction attribution for this specific alert (None when the model is
+    # not an explainable tree ensemble or the event features are unavailable).
+    explanation: PredictionExplanation | None = None
     model_name: str | None = None
     model_version: str | None = None
     truncated: bool = False  # set when results hit max_events / max_alerts caps

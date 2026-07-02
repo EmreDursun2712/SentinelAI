@@ -29,11 +29,13 @@ from ml.artifacts import make_version, save_artifacts, update_latest
 from ml.baseline import compute_baseline
 from ml.calibration import calibration_report, calibrate_pipeline
 from ml.data_loader import load_path
+from ml.feature_list import CANONICAL_FEATURES
 from ml.hpo import run_search
 from ml.metrics import compute_metrics, confusion_matrix_json
 from ml.pipeline import build_pipeline
 from ml.preprocess import build_xy, clean_frame
 from ml.profiles import get_profile
+from ml.sampling import balance_classes, drop_rare_classes
 from ml.synthetic import generate as generate_synthetic
 
 if TYPE_CHECKING:
@@ -73,6 +75,37 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="auto",
         help="Dataset profile — controls label normalization (see ml/profiles.py). "
         "Use 'cic2017' with real CIC-IDS2017 data.",
+    )
+    parser.add_argument(
+        "--feature-set",
+        choices=("full", "canonical"),
+        default="full",
+        help="Which columns become features. 'full' uses every numeric column "
+        "(the real CIC-IDS2017 ~76-feature vector). 'canonical' restricts to the "
+        "21-feature schema the demo CSV and backend share, so a model trained on "
+        "real data serves the shipped sample with 100%% feature coverage.",
+    )
+    parser.add_argument(
+        "--balance",
+        choices=("none", "cap"),
+        default="none",
+        help="Class-imbalance handling. 'cap' downsamples over-represented classes "
+        "to --max-per-class while keeping every rare-class row; pairs with "
+        "class_weight='balanced' and --calibrate to lift rare-class macro-F1.",
+    )
+    parser.add_argument(
+        "--max-per-class",
+        type=int,
+        default=20_000,
+        help="Row cap per class when --balance cap is set.",
+    )
+    parser.add_argument(
+        "--min-class-count",
+        type=int,
+        default=0,
+        help="Drop classes with fewer than N rows before splitting (0 = keep all). "
+        "Guards the stratified split + CV calibration against CIC's tiniest "
+        "families (e.g. Heartbleed) that are too small to evaluate.",
     )
     parser.add_argument(
         "--search",
@@ -179,9 +212,36 @@ def main(argv: list[str] | None = None) -> int:
     df = df[df["label"] != ""].reset_index(drop=True)
     logger.info("Applied '%s' label profile; rows: %d", profile.name, len(df))
 
-    X, y_str = build_xy(df)
+    # Drop classes too small to split/evaluate (keep-all by default).
+    df, dropped_classes = drop_rare_classes(df, min_count=args.min_class_count)
+    if dropped_classes:
+        logger.info(
+            "Dropped %d class(es) below min-class-count=%d: %s",
+            len(dropped_classes),
+            args.min_class_count,
+            dropped_classes,
+        )
+
+    # Class-imbalance handling (cap the majority, keep the rare tail) — applied
+    # after label folding so the cap operates on final class names.
+    df, balance_report = balance_classes(
+        df, mode=args.balance, max_per_class=args.max_per_class, random_state=args.random_state
+    )
+    if args.balance != "none":
+        logger.info(
+            "Balanced classes (mode=%s, cap=%d); rows: %d; capped=%s",
+            args.balance,
+            args.max_per_class,
+            len(df),
+            balance_report["capped_classes"],
+        )
+
+    # 'canonical' pins the feature vector to the 21-column demo schema (missing
+    # columns fill as NaN for the imputer); 'full' auto-selects every numeric col.
+    forced_features = list(CANONICAL_FEATURES) if args.feature_set == "canonical" else None
+    X, y_str = build_xy(df, feature_order=forced_features)
     feature_order = list(X.columns)
-    logger.info("Using %d features", len(feature_order))
+    logger.info("Using %d features (feature-set=%s)", len(feature_order), args.feature_set)
 
     encoder = LabelEncoder()
     y = encoder.fit_transform(y_str)
@@ -299,6 +359,12 @@ def main(argv: list[str] | None = None) -> int:
         "random_state": args.random_state,
         "n_estimators": args.n_estimators,
         "profile": profile.name,
+        "feature_set": args.feature_set,
+        # Before/after per-class counts from imbalance handling ({"mode": "none"}
+        # when balancing is off) — makes the rare-class preservation auditable.
+        "balance": balance_report,
+        "min_class_count": args.min_class_count,
+        "dropped_classes": dropped_classes,
         # Expected share of trained features present at inference time. The
         # backend warns when an inference batch falls below this (see
         # detection_service.assess_feature_coverage).

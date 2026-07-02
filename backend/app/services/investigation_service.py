@@ -12,11 +12,15 @@ Design choices:
 * The summary is built by ``_build_summary`` from the gathered evidence;
   there is no free-text generation, no model-side hallucination risk.
 * Feature importance, when available, comes from the loaded RandomForest
-  pipeline's ``feature_importances_`` — global importance, not per-prediction.
+  pipeline's ``feature_importances_`` — global importance.
+* Per-prediction attribution (why *this* alert got *this* class) is added via
+  ``explanation_service.explain_prediction`` — the exact tree-path (TreeSHAP-style)
+  decomposition of the model's probability for the alert's own flow.
 """
 
 from __future__ import annotations
 
+import asyncio
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -29,13 +33,16 @@ from app.core.logging import get_logger
 from app.models import AgentDecision, Alert, AlertArtifact, NetworkEvent
 from app.models.enums import AgentName, AlertStatus, ArtifactKind
 from app.schemas.investigation import (
+    FeatureContributionItem,
     FeatureImportanceItem,
     InvestigationPacket,
     InvestigationStatistics,
+    PredictionExplanation,
     RelatedAlertOut,
     RelatedEventOut,
     TimelineItem,
 )
+from app.services.explanation_service import explain_prediction
 from app.services.model_registry import get_model_registry
 
 logger = get_logger(__name__)
@@ -75,6 +82,7 @@ async def investigate_alert(
     timeline = _build_timeline(alert, related_events, related_alerts)
     summary, bullets = _build_summary(alert, stats)
     importance, model_name, model_version = _feature_importance(top_k=DEFAULT_TOP_FEATURES)
+    explanation = await _prediction_explanation(session, alert)
 
     packet = InvestigationPacket(
         alert_id=alert.id,
@@ -88,6 +96,7 @@ async def investigate_alert(
         related_events=[_to_related_event(e) for e in related_events],
         timeline=timeline,
         feature_importance=importance,
+        explanation=explanation,
         model_name=model_name,
         model_version=model_version,
         truncated=events_truncated or alerts_truncated,
@@ -453,6 +462,42 @@ def _feature_importance(
         [FeatureImportanceItem(feature=f, importance=float(i)) for f, i in pairs],
         bundle.name,
         bundle.version,
+    )
+
+
+async def _prediction_explanation(
+    session: AsyncSession, alert: Alert
+) -> PredictionExplanation | None:
+    """Local, per-prediction attribution for this alert (None when unavailable).
+
+    Explains why the model assigned ``alert.prediction`` to the alert's own flow,
+    using the exact tree-path decomposition. Needs the loaded model, a prediction
+    label, and the originating event's feature vector; any missing → None.
+    """
+    if not alert.prediction or alert.event_id is None:
+        return None
+    bundle = get_model_registry().get()
+    if bundle is None:
+        return None
+    event = await session.get(NetworkEvent, alert.event_id)
+    if event is None or not event.features:
+        return None
+
+    result = await asyncio.to_thread(
+        explain_prediction, bundle, dict(event.features), alert.prediction
+    )
+    if result is None:
+        return None
+    return PredictionExplanation(
+        method=result.method,
+        explained_class=result.explained_class,
+        base_value=result.base_value,
+        contribution_sum=result.contribution_sum,
+        model_probability=result.model_probability,
+        contributions=[
+            FeatureContributionItem(feature=c.feature, value=c.value, contribution=c.contribution)
+            for c in result.contributions
+        ],
     )
 
 

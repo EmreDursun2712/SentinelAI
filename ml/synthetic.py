@@ -15,30 +15,13 @@ from typing import Final
 import numpy as np
 import pandas as pd
 
+from ml.feature_list import CANONICAL_FEATURES
 
-FEATURES: Final[tuple[str, ...]] = (
-    "flow_duration",
-    "total_fwd_packets",
-    "total_backward_packets",
-    "total_length_of_fwd_packets",
-    "total_length_of_bwd_packets",
-    "fwd_packet_length_mean",
-    "bwd_packet_length_mean",
-    "flow_bytes/s",
-    "flow_packets/s",
-    "flow_iat_mean",
-    "flow_iat_std",
-    "fwd_iat_mean",
-    "bwd_iat_mean",
-    "packet_length_mean",
-    "packet_length_std",
-    "fin_flag_count",
-    "syn_flag_count",
-    "rst_flag_count",
-    "psh_flag_count",
-    "ack_flag_count",
-    "average_packet_size",
-)
+# The generator emits exactly the canonical 21-feature schema. Sourcing it from
+# ``feature_list`` keeps the synthetic data, the demo CSV, and canonical-feature
+# training on real data locked to one column order (CLASS_CENTERS below are
+# positionally aligned to this tuple).
+FEATURES: Final[tuple[str, ...]] = CANONICAL_FEATURES
 
 
 # CIC-IDS2017-style display headers for each canonical feature. The backend

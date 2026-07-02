@@ -2,6 +2,7 @@ import type {
   ActivationResult,
   ModelActivationList,
   ModelVersionList,
+  PromoteResult,
   ShadowEval,
 } from "@/lib/types";
 import { request } from "./client";
@@ -46,4 +47,15 @@ export function shadowEval(
 /** Recent shadow evaluations. */
 export function listShadowEvals(limit = 20): Promise<ShadowEval[]> {
   return request<ShadowEval[]>(`/models/shadow?limit=${limit}`);
+}
+
+/** Shadow-eval a candidate and auto-activate it iff recommended (ADMIN). */
+export function promoteModel(
+  candidateVersionId: number,
+  windowHours = 24,
+): Promise<PromoteResult> {
+  return request<PromoteResult>("/models/promote", {
+    method: "POST",
+    body: { candidate_version_id: candidateVersionId, window_hours: windowHours },
+  });
 }
