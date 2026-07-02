@@ -174,6 +174,7 @@ async def ingest_flows(session: SessionDep, batch: FlowBatchIn) -> FlowBatchSumm
                     events,
                     threshold=settings.detection_threshold,
                     benign_label=settings.detection_benign_label,
+                    class_thresholds=settings.detection_class_thresholds,
                 )
                 detection_ran = True
                 alerts_created = sum(1 for p in predictions if p.alert_created)

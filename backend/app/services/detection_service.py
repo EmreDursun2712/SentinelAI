@@ -77,6 +77,21 @@ def build_feature_matrix(
     return pd.DataFrame(rows, columns=feature_order)
 
 
+def resolve_threshold(
+    label: str, default: float, class_thresholds: dict[str, float] | None
+) -> float:
+    """Per-class threshold if configured for ``label``, else the global default.
+
+    Lets rare/high-impact families alert at a lower confidence than the global
+    bar (better recall on the classes that matter most).
+    """
+    if class_thresholds:
+        override = class_thresholds.get(label)
+        if override is not None:
+            return float(override)
+    return default
+
+
 def should_create_alert(label: str, confidence: float, threshold: float, benign_label: str) -> bool:
     """A non-benign label that clears the confidence threshold becomes an alert."""
     if label == benign_label:
@@ -178,6 +193,7 @@ def predict_flows(
     *,
     threshold: float,
     benign_label: str,
+    class_thresholds: dict[str, float] | None = None,
 ) -> list[Prediction]:
     """Run inference on raw ``FlowRecordIn`` rows. No DB writes."""
     if not flows:
@@ -189,13 +205,14 @@ def predict_flows(
 
     predictions: list[Prediction] = []
     for label, conf, probabilities in zip(labels, confs, probs, strict=True):
+        thr = resolve_threshold(label, threshold, class_thresholds)
         predictions.append(
             Prediction(
                 event_id=None,
                 predicted_label=label,
                 confidence=conf,
                 class_probabilities=probabilities,
-                threshold=threshold,
+                threshold=thr,
                 benign=(label == benign_label),
                 alert_created=False,
                 alert_id=None,
@@ -280,6 +297,7 @@ async def detect_events(
     benign_label: str,
     auto_triage: bool = True,
     auto_respond: bool = True,
+    class_thresholds: dict[str, float] | None = None,
 ) -> list[Prediction]:
     """Classify ``events``, persist alerts + decisions, mark events as detected.
 
@@ -308,11 +326,15 @@ async def detect_events(
 
     # Collected during the txn, broadcast only after a successful commit below.
     broadcast: list[tuple[str, dict[str, Any]]] = []
+    # Alerts that qualify for an external notification (severity known post-triage);
+    # captured as plain values so dispatch is safe after the commit expires ORM state.
+    notify_candidates: list[dict[str, Any]] = []
 
     predictions: list[Prediction] = []
     for event, label, conf, probabilities in zip(events, labels, confs, probs, strict=True):
         benign = label == benign_label
-        alert_now = should_create_alert(label, conf, threshold, benign_label)
+        thr = resolve_threshold(label, threshold, class_thresholds)
+        alert_now = should_create_alert(label, conf, thr, benign_label)
         event.detected_at = now
 
         alert_id: int | None = None
@@ -341,7 +363,7 @@ async def detect_events(
                     "class_probabilities": probabilities,
                     "model_name": bundle.name,
                     "model_version": bundle.version,
-                    "threshold": threshold,
+                    "threshold": thr,
                     "benign_label": benign_label,
                 },
             )
@@ -373,6 +395,16 @@ async def detect_events(
                         },
                     )
                 )
+                notify_candidates.append(
+                    {
+                        "alert_id": alert_id,
+                        "prediction": label,
+                        "severity": alert.severity.value if alert.severity else None,
+                        "src_ip": str(alert.src_ip) if alert.src_ip else None,
+                        "dst_ip": str(alert.dst_ip) if alert.dst_ip else None,
+                        "confidence": conf,
+                    }
+                )
                 if auto_respond:
                     # Response uses the severity set by triage.
                     await recommend_for_alert(session, alert, commit=False)
@@ -389,7 +421,7 @@ async def detect_events(
                 predicted_label=label,
                 confidence=conf,
                 class_probabilities=probabilities,
-                threshold=threshold,
+                threshold=thr,
                 benign=benign,
                 alert_created=alert_now,
                 alert_id=alert_id,
@@ -417,6 +449,13 @@ async def detect_events(
         EventType.DETECTION_RUN_COMPLETED,
         {"processed": len(predictions), "alerts_created": n_alerts},
     )
+
+    # External notifications for high-severity alerts (gated + best-effort;
+    # no-op unless notifications are enabled and a channel is configured).
+    from app.services.notification_service import notify_alert
+
+    for c in notify_candidates:
+        await notify_alert(**c, reason="new_alert")
     return predictions
 
 

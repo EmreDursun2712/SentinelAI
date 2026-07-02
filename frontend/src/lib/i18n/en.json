@@ -1,0 +1,44 @@
+{
+  "app": {
+    "name": "SentinelAI",
+    "subtitle": "IDS Console"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "alerts": "Alerts",
+    "response": "Response Center",
+    "reports": "Reports",
+    "ingestion": "Ingestion",
+    "system": "System",
+    "audit": "Audit trail",
+    "users": "Users"
+  },
+  "topbar": {
+    "signOut": "Sign out",
+    "language": "Language"
+  },
+  "common": {
+    "loading": "Loading…",
+    "search": "Search",
+    "clearFilters": "Clear filters",
+    "loadMore": "Load more",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "noData": "No data"
+  },
+  "pages": {
+    "dashboard": { "title": "Dashboard" },
+    "alerts": {
+      "title": "Alerts",
+      "correlatedIncidents": "Correlated incidents",
+      "correlatedHint": "Repeated alerts grouped by source + family over the last 24h. Click to filter."
+    },
+    "reports": { "title": "Reports" },
+    "system": { "title": "System" },
+    "audit": {
+      "title": "Audit trail",
+      "description": "Unified, immutable record of who did what, when."
+    },
+    "hosts": { "timelineTitle": "Host timeline" }
+  }
+}

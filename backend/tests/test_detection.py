@@ -12,6 +12,7 @@ import pytest
 from app.services.detection_service import (
     build_feature_matrix,
     predict_flows,
+    resolve_threshold,
     should_create_alert,
 )
 from app.services.model_registry import ModelBundle, ModelRegistry
@@ -68,6 +69,51 @@ def test_alert_decision_benign_never_triggers() -> None:
 
 def test_alert_decision_non_benign_above_threshold_triggers() -> None:
     assert should_create_alert("PortScan", confidence=0.99, threshold=0.5, benign_label="BENIGN")
+
+
+# ----- resolve_threshold (per-class) ---------------------------------------
+
+
+def test_resolve_threshold_uses_class_override() -> None:
+    thresholds = {"PortScan": 0.3, "WebAttack": 0.4}
+    assert resolve_threshold("PortScan", 0.5, thresholds) == 0.3
+    assert resolve_threshold("WebAttack", 0.5, thresholds) == 0.4
+
+
+def test_resolve_threshold_falls_back_to_global() -> None:
+    assert resolve_threshold("DDoS", 0.5, {"PortScan": 0.3}) == 0.5
+    assert resolve_threshold("DDoS", 0.5, None) == 0.5
+    assert resolve_threshold("DDoS", 0.5, {}) == 0.5
+
+
+def test_per_class_threshold_lowers_the_alert_bar() -> None:
+    # A 0.35-confidence PortScan wouldn't clear the global 0.5, but does clear a
+    # 0.3 per-class override → alert.
+    thr = resolve_threshold("PortScan", 0.5, {"PortScan": 0.3})
+    assert should_create_alert("PortScan", confidence=0.35, threshold=thr, benign_label="BENIGN")
+    # Same confidence under the global bar → no alert.
+    assert not should_create_alert(
+        "PortScan", confidence=0.35, threshold=0.5, benign_label="BENIGN"
+    )
+
+
+def test_predict_flows_applies_per_class_threshold() -> None:
+    from types import SimpleNamespace
+
+    bundle = _make_bundle(
+        classes=["BENIGN", "PortScan"],
+        probabilities_per_row=[[0.35, 0.65]],  # top = PortScan
+    )
+    flows = [SimpleNamespace(features={"flow_duration": 5.0, "total_fwd_packets": 2})]
+    preds = predict_flows(
+        bundle,
+        flows,
+        threshold=0.5,
+        benign_label="BENIGN",
+        class_thresholds={"PortScan": 0.3},
+    )
+    assert preds[0].predicted_label == "PortScan"
+    assert preds[0].threshold == 0.3  # the per-class threshold is recorded, not the global 0.5
 
 
 # ----- predict_flows (with a fake pipeline) --------------------------------

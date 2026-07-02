@@ -1,5 +1,10 @@
 # SentinelAI
 
+[![backend](https://github.com/EmreDursun2712/SentinelAI/actions/workflows/backend.yml/badge.svg)](https://github.com/EmreDursun2712/SentinelAI/actions/workflows/backend.yml)
+[![frontend](https://github.com/EmreDursun2712/SentinelAI/actions/workflows/frontend.yml/badge.svg)](https://github.com/EmreDursun2712/SentinelAI/actions/workflows/frontend.yml)
+[![security](https://github.com/EmreDursun2712/SentinelAI/actions/workflows/security.yml/badge.svg)](https://github.com/EmreDursun2712/SentinelAI/actions/workflows/security.yml)
+[![coverage](https://img.shields.io/badge/backend%20coverage-68%25-brightgreen)](docs/QUALITY.md)
+
 > 🇬🇧 English below · 🇹🇷 **Türkçe için aşağı kaydırın** ([Türkçe README](#-sentinelai--türkçe))
 
 AI-driven intrusion detection and response dashboard. Third-year Computer and Network Security term project.

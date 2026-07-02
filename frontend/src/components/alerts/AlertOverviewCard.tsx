@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { formatConfidence, formatDateTime, formatPriority } from "@/lib/format";
 import type { AlertDetail } from "@/lib/types";
@@ -13,8 +15,8 @@ export function AlertOverviewCard({ alert }: { alert: AlertDetail }) {
       </CardHeader>
       <dl className="space-y-2 text-sm">
         <Field label="Alert ID" value={`#${alert.id}`} mono />
-        <Field label="Source" value={src} mono />
-        <Field label="Destination" value={dst} mono />
+        <Field label="Source" value={src} mono to={`/hosts/${alert.src_ip}`} />
+        <Field label="Destination" value={dst} mono to={`/hosts/${alert.dst_ip}`} />
         <Field label="Protocol" value={alert.protocol ?? "—"} />
         <Field label="Prediction" value={alert.prediction} />
         <Field label="Confidence" value={formatConfidence(alert.confidence)} mono />
@@ -32,11 +34,29 @@ export function AlertOverviewCard({ alert }: { alert: AlertDetail }) {
   );
 }
 
-function Field({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function Field({
+  label,
+  value,
+  mono,
+  to,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  to?: string;
+}) {
   return (
     <div className="flex items-center justify-between gap-2">
       <dt className="text-xs uppercase tracking-wider text-slate-500">{label}</dt>
-      <dd className={`text-sm text-slate-300 ${mono ? "font-mono" : ""}`}>{value}</dd>
+      <dd className={`text-sm text-slate-300 ${mono ? "font-mono" : ""}`}>
+        {to ? (
+          <Link to={to} className="text-emerald-300 hover:underline" title="View host timeline">
+            {value}
+          </Link>
+        ) : (
+          value
+        )}
+      </dd>
     </div>
   );
 }

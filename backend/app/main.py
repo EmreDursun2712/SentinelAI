@@ -16,10 +16,12 @@ from app.api.deps import enforce_rbac, rate_limit
 from app.api.routers import (
     admin,
     alerts,
+    audit,
     auth,
     dashboard,
     detection,
     health,
+    hosts,
     ingest,
     models,
     reports,
@@ -348,8 +350,11 @@ def create_app() -> FastAPI:
     app.include_router(models.router, prefix=API_V1_PREFIX, tags=["models"], dependencies=protected)
     app.include_router(tasks.router, prefix=API_V1_PREFIX, tags=["tasks"], dependencies=protected)
     app.include_router(admin.router, prefix=API_V1_PREFIX, tags=["admin"], dependencies=protected)
-    # NOTE: the WebSocket /stream is an echo stub today and is secured in the
-    # WebSocket-broadcasting etap (token via query param). It carries no data.
+    app.include_router(audit.router, prefix=API_V1_PREFIX, tags=["audit"], dependencies=protected)
+    app.include_router(hosts.router, prefix=API_V1_PREFIX, tags=["hosts"], dependencies=protected)
+    # The WebSocket /stream authenticates the JWT (?token= / subprotocol) before
+    # the handshake, then pushes live domain events to the dashboard via the
+    # connection manager. Not under `protected` — it does its own token check.
     app.include_router(stream.router, prefix=API_V1_PREFIX, tags=["stream"])
 
     return app

@@ -5,7 +5,9 @@ import { AppShell } from "@/components/layout/AppShell";
 import AdminUsersPage from "@/pages/AdminUsersPage";
 import AlertDetailPage from "@/pages/AlertDetailPage";
 import AlertsPage from "@/pages/AlertsPage";
+import AuditPage from "@/pages/AuditPage";
 import DashboardPage from "@/pages/DashboardPage";
+import HostTimelinePage from "@/pages/HostTimelinePage";
 import IngestionPage from "@/pages/IngestionPage";
 import LoginPage from "@/pages/LoginPage";
 import ReportsPage from "@/pages/ReportsPage";
@@ -21,10 +23,12 @@ export default function App() {
           <Route index element={<DashboardPage />} />
           <Route path="alerts" element={<AlertsPage />} />
           <Route path="alerts/:id" element={<AlertDetailPage />} />
+          <Route path="hosts/:ip" element={<HostTimelinePage />} />
           <Route path="response" element={<ResponseCenterPage />} />
           <Route path="reports" element={<ReportsPage />} />
           <Route path="ingestion" element={<IngestionPage />} />
           <Route path="system" element={<SystemPage />} />
+          <Route path="audit" element={<AuditPage />} />
           <Route path="admin/users" element={<AdminUsersPage />} />
         </Route>
       </Route>

@@ -59,11 +59,22 @@ class ModelInfoOut(BaseModel):
     db_id: int | None = None
     is_active: bool | None = None
     threshold: float | None = None
+    # Per-class threshold overrides (label → threshold); the global `threshold`
+    # applies to any class not listed here.
+    class_thresholds: dict[str, float] = Field(default_factory=dict)
     benign_label: str | None = None
     # Declared at train time: the share of trained features the model expects to
     # see at inference. Surfaced on the dashboard model panel.
     expected_feature_coverage: float | None = None
     calibrated: bool | None = None
+    # Full calibration block from training metadata: method, multiclass Brier
+    # score, and the reliability curve (binned confidence vs. accuracy). Drives
+    # the Model health calibration chart. None for artifacts trained before it.
+    calibration: dict[str, Any] | None = None
+    # Training feature set ("full" | "canonical") and dataset profile, so the
+    # dashboard can show whether the active model is the real, canonical one.
+    feature_set: str | None = None
+    profile: str | None = None
 
     model_config = ConfigDict(from_attributes=False)
 

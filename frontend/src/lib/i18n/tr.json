@@ -1,0 +1,44 @@
+{
+  "app": {
+    "name": "SentinelAI",
+    "subtitle": "IDS Konsolu"
+  },
+  "nav": {
+    "dashboard": "Panel",
+    "alerts": "Alarmlar",
+    "response": "Müdahale Merkezi",
+    "reports": "Raporlar",
+    "ingestion": "Veri Alımı",
+    "system": "Sistem",
+    "audit": "Denetim izi",
+    "users": "Kullanıcılar"
+  },
+  "topbar": {
+    "signOut": "Çıkış yap",
+    "language": "Dil"
+  },
+  "common": {
+    "loading": "Yükleniyor…",
+    "search": "Ara",
+    "clearFilters": "Filtreleri temizle",
+    "loadMore": "Daha fazla yükle",
+    "cancel": "İptal",
+    "confirm": "Onayla",
+    "noData": "Veri yok"
+  },
+  "pages": {
+    "dashboard": { "title": "Panel" },
+    "alerts": {
+      "title": "Alarmlar",
+      "correlatedIncidents": "İlişkilendirilmiş olaylar",
+      "correlatedHint": "Son 24 saatte kaynak + aile bazında gruplanan tekrarlı alarmlar. Filtrelemek için tıkla."
+    },
+    "reports": { "title": "Raporlar" },
+    "system": { "title": "Sistem" },
+    "audit": {
+      "title": "Denetim izi",
+      "description": "Kim, ne zaman, neyi yaptı — birleşik ve değiştirilemez kayıt."
+    },
+    "hosts": { "timelineTitle": "Host zaman çizelgesi" }
+  }
+}

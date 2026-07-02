@@ -54,6 +54,115 @@
         "title": "AgentName",
         "type": "string"
       },
+      "AlertClusterListOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AlertClusterOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total_clusters": {
+            "title": "Total Clusters",
+            "type": "integer"
+          },
+          "window_hours": {
+            "title": "Window Hours",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "window_hours",
+          "total_clusters"
+        ],
+        "title": "AlertClusterListOut",
+        "type": "object"
+      },
+      "AlertClusterOut": {
+        "description": "A correlated incident: repeated alerts from one source/family collapsed.",
+        "properties": {
+          "activity_span_seconds": {
+            "title": "Activity Span Seconds",
+            "type": "number"
+          },
+          "alert_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Alert Ids",
+            "type": "array"
+          },
+          "correlation_key": {
+            "title": "Correlation Key",
+            "type": "string"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "distinct_destinations": {
+            "title": "Distinct Destinations",
+            "type": "integer"
+          },
+          "first_seen": {
+            "format": "date-time",
+            "title": "First Seen",
+            "type": "string"
+          },
+          "last_seen": {
+            "format": "date-time",
+            "title": "Last Seen",
+            "type": "string"
+          },
+          "max_priority": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Priority"
+          },
+          "max_severity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Severity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "open_count": {
+            "title": "Open Count",
+            "type": "integer"
+          },
+          "prediction": {
+            "title": "Prediction",
+            "type": "string"
+          },
+          "src_ip": {
+            "title": "Src Ip",
+            "type": "string"
+          }
+        },
+        "required": [
+          "correlation_key",
+          "src_ip",
+          "prediction",
+          "count",
+          "open_count",
+          "first_seen",
+          "last_seen",
+          "activity_span_seconds",
+          "distinct_destinations"
+        ],
+        "title": "AlertClusterOut",
+        "type": "object"
+      },
       "AlertDecisionOut": {
         "properties": {
           "agent": {
@@ -900,6 +1009,99 @@
         "title": "ApproveRequest",
         "type": "object"
       },
+      "AuditEntryOut": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "actor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target"
+          },
+          "timestamp": {
+            "format": "date-time",
+            "title": "Timestamp",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "timestamp",
+          "category",
+          "action"
+        ],
+        "title": "AuditEntryOut",
+        "type": "object"
+      },
+      "AuditListOut": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AuditEntryOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "has_more",
+          "limit",
+          "offset"
+        ],
+        "title": "AuditListOut",
+        "type": "object"
+      },
       "BatchEventRequest": {
         "properties": {
           "event_ids": {
@@ -1598,6 +1800,36 @@
         "title": "ExecutionMode",
         "type": "string"
       },
+      "FeatureContributionItem": {
+        "description": "One feature's signed push toward the predicted class for this alert.",
+        "properties": {
+          "contribution": {
+            "title": "Contribution",
+            "type": "number"
+          },
+          "feature": {
+            "title": "Feature",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "feature",
+          "contribution"
+        ],
+        "title": "FeatureContributionItem",
+        "type": "object"
+      },
       "FeatureImportanceItem": {
         "properties": {
           "feature": {
@@ -1825,6 +2057,104 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HostTimelineOut": {
+        "properties": {
+          "ip": {
+            "title": "Ip",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TimelineEntryOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/HostTimelineSummary"
+          },
+          "window_hours": {
+            "title": "Window Hours",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ip",
+          "window_hours",
+          "summary"
+        ],
+        "title": "HostTimelineOut",
+        "type": "object"
+      },
+      "HostTimelineSummary": {
+        "properties": {
+          "alert_count": {
+            "title": "Alert Count",
+            "type": "integer"
+          },
+          "event_count": {
+            "title": "Event Count",
+            "type": "integer"
+          },
+          "families": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Families",
+            "type": "array"
+          },
+          "first_seen": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Seen"
+          },
+          "ip": {
+            "title": "Ip",
+            "type": "string"
+          },
+          "last_seen": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen"
+          },
+          "max_severity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Severity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "response_count": {
+            "title": "Response Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ip",
+          "event_count",
+          "alert_count",
+          "response_count"
+        ],
+        "title": "HostTimelineSummary",
         "type": "object"
       },
       "IncidentKind": {
@@ -2177,6 +2507,16 @@
           "events_window_minutes": {
             "title": "Events Window Minutes",
             "type": "integer"
+          },
+          "explanation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PredictionExplanation"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "feature_importance": {
             "items": {
@@ -2593,6 +2933,25 @@
             ],
             "title": "Calibrated"
           },
+          "calibration": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calibration"
+          },
+          "class_thresholds": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Class Thresholds",
+            "type": "object"
+          },
           "classes": {
             "items": {
               "type": "string"
@@ -2628,6 +2987,17 @@
             },
             "title": "Feature Order",
             "type": "array"
+          },
+          "feature_set": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feature Set"
           },
           "is_active": {
             "anyOf": [
@@ -2671,6 +3041,17 @@
               }
             ],
             "title": "Name"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile"
           },
           "threshold": {
             "anyOf": [
@@ -2910,6 +3291,53 @@
         "title": "PredictRequest",
         "type": "object"
       },
+      "PredictionExplanation": {
+        "description": "Local, per-prediction attribution (why *this* alert got *this* class).",
+        "properties": {
+          "base_value": {
+            "title": "Base Value",
+            "type": "number"
+          },
+          "contribution_sum": {
+            "title": "Contribution Sum",
+            "type": "number"
+          },
+          "contributions": {
+            "items": {
+              "$ref": "#/components/schemas/FeatureContributionItem"
+            },
+            "title": "Contributions",
+            "type": "array"
+          },
+          "explained_class": {
+            "title": "Explained Class",
+            "type": "string"
+          },
+          "method": {
+            "title": "Method",
+            "type": "string"
+          },
+          "model_probability": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Probability"
+          }
+        },
+        "required": [
+          "method",
+          "explained_class",
+          "base_value",
+          "contribution_sum"
+        ],
+        "title": "PredictionExplanation",
+        "type": "object"
+      },
       "PredictionOut": {
         "properties": {
           "alert_created": {
@@ -2971,6 +3399,56 @@
           "alert_created"
         ],
         "title": "PredictionOut",
+        "type": "object"
+      },
+      "PromoteRequest": {
+        "properties": {
+          "candidate_version_id": {
+            "title": "Candidate Version Id",
+            "type": "integer"
+          },
+          "window_hours": {
+            "default": 24,
+            "maximum": 720.0,
+            "minimum": 1.0,
+            "title": "Window Hours",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "candidate_version_id"
+        ],
+        "title": "PromoteRequest",
+        "type": "object"
+      },
+      "PromoteResult": {
+        "description": "Outcome of an auto-promote attempt: the eval + whether it activated.",
+        "properties": {
+          "active_version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Version Id"
+          },
+          "evaluation": {
+            "$ref": "#/components/schemas/ShadowEvalOut"
+          },
+          "promoted": {
+            "title": "Promoted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "promoted",
+          "active_version_id",
+          "evaluation"
+        ],
+        "title": "PromoteResult",
         "type": "object"
       },
       "RecommendResponse": {
@@ -3843,6 +4321,18 @@
             "title": "Metrics",
             "type": "object"
           },
+          "recommendation": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommendation"
+          },
           "sample_count": {
             "title": "Sample Count",
             "type": "integer"
@@ -4038,6 +4528,78 @@
         ],
         "title": "TaskStatus",
         "type": "string"
+      },
+      "TimelineEntryOut": {
+        "properties": {
+          "alert_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alert Id"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "phase": {
+            "title": "Phase",
+            "type": "string"
+          },
+          "prediction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prediction"
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Severity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "timestamp": {
+            "format": "date-time",
+            "title": "Timestamp",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "timestamp",
+          "kind",
+          "phase",
+          "title"
+        ],
+        "title": "TimelineEntryOut",
+        "type": "object"
       },
       "TimelineItem": {
         "properties": {
@@ -4840,6 +5402,96 @@
           }
         },
         "summary": "List Alerts",
+        "tags": [
+          "alerts"
+        ]
+      }
+    },
+    "/api/v1/alerts/correlated": {
+      "get": {
+        "description": "Correlated incidents: repeated alerts grouped by (source IP, family).\n\nCollapses alert noise so an analyst sees \"one PortScan campaign from\n10.0.0.5 (37 alerts)\" instead of 37 rows. Worst severity / highest volume\nfirst. Computed at read time over the recent window.",
+        "operationId": "list_correlated_api_v1_alerts_correlated_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "window_hours",
+            "required": false,
+            "schema": {
+              "default": 24,
+              "maximum": 720,
+              "minimum": 1,
+              "title": "Window Hours",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "sentinelai_access",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sentinelai Access"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertClusterListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Correlated",
         "tags": [
           "alerts"
         ]
@@ -5747,6 +6399,131 @@
         "summary": "Triage",
         "tags": [
           "alerts"
+        ]
+      }
+    },
+    "/api/v1/audit": {
+      "get": {
+        "operationId": "list_audit_api_v1_audit_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 100000,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "sentinelai_access",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sentinelai Access"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Audit",
+        "tags": [
+          "audit"
         ]
       }
     },
@@ -6917,6 +7694,92 @@
         ]
       }
     },
+    "/api/v1/hosts/{ip}/timeline": {
+      "get": {
+        "operationId": "get_host_timeline_api_v1_hosts__ip__timeline_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ip",
+            "required": true,
+            "schema": {
+              "title": "Ip",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "window_hours",
+            "required": false,
+            "schema": {
+              "default": 24,
+              "maximum": 720,
+              "minimum": 1,
+              "title": "Window Hours",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "sentinelai_access",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sentinelai Access"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostTimelineOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Host Timeline",
+        "tags": [
+          "hosts"
+        ]
+      }
+    },
     "/api/v1/ingest/flow": {
       "post": {
         "description": "Ingest a single flow record. Useful for live producers and tests.",
@@ -7596,6 +8459,82 @@
         ]
       }
     },
+    "/api/v1/models/promote": {
+      "post": {
+        "description": "Shadow-eval a candidate and auto-activate it only if the eval recommends it.\n\nADMIN-only. Runs the same label-aware A/B comparison as ``/shadow`` and, when\nthe recommendation is ``promote`` (candidate macro-F1 clears the active model\nby the margin on enough labelled traffic), performs a real, audited\nactivation. Otherwise the active model is left untouched.",
+        "operationId": "promote_model_api_v1_models_promote_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "sentinelai_access",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sentinelai Access"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromoteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromoteResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Promote Model",
+        "tags": [
+          "models"
+        ]
+      }
+    },
     "/api/v1/models/rollback": {
       "post": {
         "operationId": "rollback_model_api_v1_models_rollback_post",
@@ -8269,6 +9208,74 @@
           }
         },
         "summary": "Get Report Markdown",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/api/v1/reports/{report_id}/pdf": {
+      "get": {
+        "description": "Return the report as a downloadable PDF.\n\nServes the file written at generation time when present; otherwise renders\non the fly from the stored markdown so a PDF is always available (and older\nreports predating PDF generation still download).",
+        "operationId": "get_report_pdf_api_v1_reports__report_id__pdf_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "sentinelai_access",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sentinelai Access"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Report Pdf",
         "tags": [
           "reports"
         ]

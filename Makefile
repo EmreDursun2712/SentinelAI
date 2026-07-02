@@ -116,6 +116,10 @@ test-backend: ## Run the backend pytest suite (fast unit tests; no DB).
 test-integration: ## Run real-Postgres integration tests (needs Docker).
 	cd backend && pytest -m integration
 
+.PHONY: cov
+cov: ## Backend unit-test coverage (enforces the fail_under floor).
+	cd backend && pytest -q --cov=app --cov-report=term-missing
+
 .PHONY: test-frontend
 test-frontend: ## Run the frontend vitest suite.
 	cd frontend && npm test --silent

@@ -91,6 +91,11 @@ class Settings(BaseSettings):
     # Detection
     detection_threshold: float = 0.5
     detection_benign_label: str = "BENIGN"
+    # Per-class alert thresholds (override the global one for specific families).
+    # Rare/high-impact classes often deserve a lower bar so a lower-confidence hit
+    # still alerts (better recall). JSON in env, e.g.
+    #   SENTINEL_DETECTION_CLASS_THRESHOLDS='{"PortScan":0.35,"WebAttack":0.4}'
+    detection_class_thresholds: dict[str, float] = Field(default_factory=dict)
     # Feature coverage guardrails. "Coverage" is the share of the model's trained
     # features actually present (finite) in an inference batch. Below `warn` we log
     # a warning (the model's own `expected_feature_coverage` metadata takes
@@ -140,6 +145,24 @@ class Settings(BaseSettings):
     response_max_block_minutes: int = 60
     response_require_approval: bool = True
 
+    # External notifications. Off by default; when enabled, qualifying alerts
+    # (severity ≥ notify_min_severity, or any analyst-CONFIRMED alert) fan out to
+    # whichever channels are configured (Slack incoming webhook, a generic JSON
+    # webhook, and/or SMTP email). Dispatched through the task queue so the
+    # request path never blocks on an outbound call. See docs/NOTIFICATIONS.md.
+    notifications_enabled: bool = False
+    notify_min_severity: str = "HIGH"  # LOW | MEDIUM | HIGH | CRITICAL
+    slack_webhook_url: str | None = None
+    notify_webhook_url: str | None = None  # generic JSON POST target
+    # SMTP (optional). Email is only attempted when host + from + recipients set.
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_use_tls: bool = True
+    smtp_from: str | None = None
+    notify_email_to: str = ""  # comma-separated recipients
+
     # Demo helper. When true, an ADMIN-only endpoint can wipe operational data
     # (events, alerts, actions, reports, drift) so the dashboard returns to zero
     # between live demos. Users/sessions and the trained model are preserved.
@@ -167,6 +190,26 @@ class Settings(BaseSettings):
     @property
     def response_allowed_cidrs_list(self) -> list[str]:
         return [c.strip() for c in self.response_allowed_cidrs.split(",") if c.strip()]
+
+    @property
+    def notify_email_recipients(self) -> list[str]:
+        return [e.strip() for e in self.notify_email_to.split(",") if e.strip()]
+
+    @property
+    def smtp_configured(self) -> bool:
+        return bool(self.smtp_host and self.smtp_from and self.notify_email_recipients)
+
+    @property
+    def notification_channels(self) -> list[str]:
+        """Which external channels are actually configured (order = dispatch order)."""
+        channels: list[str] = []
+        if self.slack_webhook_url:
+            channels.append("slack")
+        if self.notify_webhook_url:
+            channels.append("webhook")
+        if self.smtp_configured:
+            channels.append("email")
+        return channels
 
     @property
     def lab_response_active(self) -> bool:

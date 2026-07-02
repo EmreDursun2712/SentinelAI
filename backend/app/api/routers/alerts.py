@@ -20,6 +20,8 @@ from app.core.errors import NotFoundError
 from app.models import Alert
 from app.models.enums import AlertDisposition, AlertStatus, Severity
 from app.schemas.alert import (
+    AlertClusterListOut,
+    AlertClusterOut,
     AlertDecisionOut,
     AlertDetailOut,
     AlertOut,
@@ -42,6 +44,7 @@ from app.schemas.reporting import (
     ReportRequest,
 )
 from app.schemas.response import ResponseActionOut
+from app.services import correlation_service
 from app.services.investigation_service import (
     get_latest_investigation,
     investigate_alert,
@@ -210,6 +213,28 @@ async def alert_timeseries(
         cursor += timedelta(hours=1)
 
     return AlertTimeseriesOut(bucket="hour", period_hours=hours, points=points)
+
+
+@router.get("/correlated")
+async def list_correlated(
+    session: SessionDep,
+    window_hours: Annotated[int, Query(ge=1, le=720)] = 24,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> AlertClusterListOut:
+    """Correlated incidents: repeated alerts grouped by (source IP, family).
+
+    Collapses alert noise so an analyst sees "one PortScan campaign from
+    10.0.0.5 (37 alerts)" instead of 37 rows. Worst severity / highest volume
+    first. Computed at read time over the recent window.
+    """
+    clusters = await correlation_service.list_correlated_alerts(
+        session, window_hours=window_hours, limit=limit
+    )
+    return AlertClusterListOut(
+        window_hours=window_hours,
+        total_clusters=len(clusters),
+        items=[AlertClusterOut.model_validate(c) for c in clusters],
+    )
 
 
 @router.get("/{alert_id}")

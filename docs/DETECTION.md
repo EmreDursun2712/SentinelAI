@@ -31,7 +31,14 @@ For every event passed through detection:
 
 1. The model returns a probability vector over `classes`.
 2. The top class becomes `predicted_label`; the top probability becomes `confidence`.
-3. **Alert rule:** `predicted_label != BENIGN AND confidence ≥ threshold`.
+3. **Alert rule:** `predicted_label != BENIGN AND confidence ≥ threshold(label)`.
+   The threshold is the global `SENTINEL_DETECTION_THRESHOLD` (default `0.5`) unless a
+   **per-class override** applies. Rare/high-impact families can alert at a lower
+   confidence (better recall) via `SENTINEL_DETECTION_CLASS_THRESHOLDS` — a JSON
+   map, e.g. `{"PortScan":0.35,"WebAttack":0.4}`. `resolve_threshold(label, …)`
+   picks the class value if present, else the global one; the resolved value is
+   recorded on the `AgentDecision` and returned in `/detection/model`
+   (`class_thresholds`) and shown on the dashboard Calibration card.
 4. If yes: a new `Alert` row is inserted (`status=NEW`) and an `AgentDecision`
    row captures the full probability vector + threshold for audit.
 5. The **Triage agent runs inline** in the same transaction (`auto_triage=True`

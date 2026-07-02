@@ -1,7 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { ConnectionPill } from "@/components/ConnectionPill";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { Button } from "@/components/ui/Button";
 import { healthApi } from "@/lib/api";
 import { useAuth } from "@/lib/auth/AuthContext";
@@ -32,6 +34,7 @@ export function Topbar() {
   const { connected: live } = useStreamStatus();
   const navigate = useNavigate();
   const toast = useToast();
+  const { t } = useTranslation();
 
   async function handleLogout() {
     await logout();
@@ -87,6 +90,8 @@ export function Topbar() {
           value={live ? "on" : "off"}
         />
 
+        <LanguageSwitcher />
+
         {user && (
           <div className="ml-2 flex items-center gap-2 border-l border-slate-800 pl-3">
             <div className="text-right leading-tight">
@@ -96,7 +101,7 @@ export function Topbar() {
               </p>
             </div>
             <Button size="sm" variant="ghost" onClick={handleLogout}>
-              Sign out
+              {t("topbar.signOut")}
             </Button>
           </div>
         )}

@@ -1,7 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useSearchParams } from "react-router-dom";
 
+import { IncidentClustersPanel } from "@/components/alerts/IncidentClustersPanel";
 import { DispositionPill } from "@/components/DispositionPill";
 import { SearchIcon } from "@/components/icons";
 import { SeverityPill } from "@/components/SeverityPill";
@@ -30,6 +32,7 @@ const DEBOUNCE_MS = 300;
 
 export default function AlertsPage() {
   const [params, setParams] = useSearchParams();
+  const { t } = useTranslation();
 
   const q = params.get("q") ?? "";
   const severity = (params.get("severity") || "") as Severity | "";
@@ -116,12 +119,20 @@ export default function AlertsPage() {
   return (
     <section className="space-y-5">
       <PageHeader
-        title="Alerts"
+        title={t("pages.alerts.title")}
         description={
           activeFilterCount > 0
             ? `${activeFilterCount} active filter(s) · ${total} match(es) · page ${page} of ${totalPages}.`
             : `${total} alert(s) · page ${page} of ${totalPages}.`
         }
+      />
+
+      {/* ---- Correlated incidents (collapses repeated alerts) ---- */}
+      <IncidentClustersPanel
+        onSelectSource={(srcIp) => {
+          setSearchInput(srcIp);
+          updateFilter("q", srcIp);
+        }}
       />
 
       {/* ---- Filter bar ---- */}

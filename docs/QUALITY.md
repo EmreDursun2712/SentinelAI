@@ -127,7 +127,7 @@ doesn't spin up the Python jobs); the heavy lanes are scheduled / on-demand.
 
 | Workflow      | When                                  | What it does                                                                 |
 | ------------- | ------------------------------------- | --------------------------------------------------------------------------- |
-| `backend.yml` | push/PR touching `backend/**`,`sensor/**` | `pip install -e ".[dev]"` → `ruff check .` → `ruff format --check .` → `pytest -q` for **backend** and **sensor** (separate jobs) |
+| `backend.yml` | push/PR touching `backend/**`,`sensor/**` | `pip install -e ".[dev]"` → `ruff check .` → `ruff format --check .` → `pytest -q --cov=app` (coverage gated, see below) for **backend** + **sensor**; real-Postgres integration in a separate job |
 | `frontend.yml`| push/PR touching `frontend/**`        | `npm ci` → `npm run typecheck` → `npm test`                                  |
 | `security.yml`| push/PR + weekly (Mon 06:00 UTC)      | `pip-audit` (informational), `npm audit --audit-level=high` (gating), CycloneDX SBOM artifact |
 | `e2e.yml`     | manual + weekly (Mon 05:00 UTC)       | `make e2e` — builds images, boots the stack, trains+stages a model, runs the smoke test, tears down |
@@ -135,6 +135,12 @@ doesn't spin up the Python jobs); the heavy lanes are scheduled / on-demand.
 `e2e.yml` is deliberately *not* on every PR — it builds Docker images and
 trains a model, which is too slow for the inner loop. Trigger it by hand from
 the Actions tab before a milestone, or let the weekly run catch regressions.
+
+**Coverage.** The backend job runs under `pytest --cov=app` and uploads
+`coverage.xml`. The floor is enforced by `[tool.coverage.report].fail_under = 60`
+in [`backend/pyproject.toml`](../backend/pyproject.toml) — the DB-free unit suite
+sits at ~68%, with the DB-bound paths covered by the integration job. Run it
+locally with `make cov`. The README coverage badge reflects this number.
 
 ### 3.2 pre-commit (local gate)
 
@@ -220,13 +226,14 @@ demo day. Each item is tagged with severity for a course-project context.
 
 ### High — must monitor
 
-- **Model–data feature mismatch.** The synthetic-trained model has 21
-  features in `feature_order`. The bundled `sample_flows.csv` only carries 9
-  of them. The pipeline's `SimpleImputer(median)` fills the rest with the
-  training-set median, which biases predictions toward the BENIGN profile
-  for ambiguous rows. *Mitigation*: in `ml.train`, prefer synthetic data
-  with the same column set as the demo CSVs, or train with the actual
-  CIC-IDS2017 columns. **Now observable:** the drift monitor
+- **Model–data feature mismatch.** *Resolved:* the shipped model is trained on
+  real CIC-IDS2017 with `--feature-set canonical`, so its `feature_order` is
+  exactly the 21 columns the bundled `sample_flows.csv` carries (100% coverage,
+  no imputer back-fill). The sample itself is now real flows (`ml.sample_export`),
+  so the real model flags them as genuine attacks. Guard rails remain:
+  canonical/alias parity is asserted in `ml/tests/`, and each model records
+  `expected_feature_coverage` so a `--feature-set full` model served against the
+  21-feature demo would warn. **Also observable:** the drift monitor
   (`/api/v1/detection/drift/*` + dashboard Model-health panel) computes a
   per-feature PSI vs the training baseline and flags OK/WATCH/DRIFT, so this
   kind of skew surfaces instead of staying silent. Older artifacts without a

@@ -1,5 +1,6 @@
 import type {
   Alert,
+  AlertClusterList,
   AlertDetail,
   AlertDisposition,
   AlertStats,
@@ -37,6 +38,11 @@ export function getAlertStats(): Promise<AlertStats> {
 
 export function getAlertTimeseries(hours = 24): Promise<AlertTimeseries> {
   return request<AlertTimeseries>(`/alerts/timeseries${qs({ hours })}`);
+}
+
+/** Correlated incidents: repeated alerts grouped by (source IP, family). */
+export function getCorrelatedAlerts(windowHours = 24, limit = 50): Promise<AlertClusterList> {
+  return request<AlertClusterList>(`/alerts/correlated${qs({ window_hours: windowHours, limit })}`);
 }
 
 export function getAlert(id: number): Promise<AlertDetail> {

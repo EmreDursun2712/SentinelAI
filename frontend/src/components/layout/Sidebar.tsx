@@ -1,9 +1,11 @@
+import { useTranslation } from "react-i18next";
 import { NavLink } from "react-router-dom";
 import type { ComponentType, SVGProps } from "react";
 
 import {
   AlertIcon,
   DashboardIcon,
+  DocumentIcon,
   IngestionIcon,
   ReportIcon,
   ResponseIcon,
@@ -15,27 +17,30 @@ import { cn } from "@/lib/cn";
 
 interface NavItem {
   to: string;
-  label: string;
+  /** i18n key under `nav.*`. */
+  labelKey: string;
   icon: ComponentType<SVGProps<SVGSVGElement>>;
   end?: boolean;
 }
 
 const NAV: readonly NavItem[] = [
-  { to: "/", label: "Dashboard", icon: DashboardIcon, end: true },
-  { to: "/alerts", label: "Alerts", icon: AlertIcon },
-  { to: "/response", label: "Response Center", icon: ResponseIcon },
-  { to: "/reports", label: "Reports", icon: ReportIcon },
-  { to: "/ingestion", label: "Ingestion", icon: IngestionIcon },
-  { to: "/system", label: "System", icon: ServerIcon },
+  { to: "/", labelKey: "nav.dashboard", icon: DashboardIcon, end: true },
+  { to: "/alerts", labelKey: "nav.alerts", icon: AlertIcon },
+  { to: "/response", labelKey: "nav.response", icon: ResponseIcon },
+  { to: "/reports", labelKey: "nav.reports", icon: ReportIcon },
+  { to: "/ingestion", labelKey: "nav.ingestion", icon: IngestionIcon },
+  { to: "/system", labelKey: "nav.system", icon: ServerIcon },
 ];
 
 // Shown only to admins.
 const ADMIN_NAV: readonly NavItem[] = [
-  { to: "/admin/users", label: "Users", icon: ShieldIcon },
+  { to: "/audit", labelKey: "nav.audit", icon: DocumentIcon },
+  { to: "/admin/users", labelKey: "nav.users", icon: ShieldIcon },
 ];
 
 export function Sidebar() {
   const { hasRole } = useAuth();
+  const { t } = useTranslation();
   const items = hasRole("ADMIN") ? [...NAV, ...ADMIN_NAV] : NAV;
   return (
     <aside
@@ -49,9 +54,9 @@ export function Sidebar() {
           </span>
           <div>
             <p className="text-[10px] uppercase tracking-widest text-slate-500">
-              SentinelAI
+              {t("app.name")}
             </p>
-            <h1 className="text-sm font-semibold text-slate-100">IDS Console</h1>
+            <h1 className="text-sm font-semibold text-slate-100">{t("app.subtitle")}</h1>
           </div>
         </div>
       </div>
@@ -73,7 +78,7 @@ export function Sidebar() {
             }
           >
             <item.icon className="h-4 w-4" aria-hidden="true" />
-            <span>{item.label}</span>
+            <span>{t(item.labelKey)}</span>
           </NavLink>
         ))}
       </nav>

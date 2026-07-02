@@ -8,6 +8,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { shouldRetry } from "@/lib/api/errors";
 import { AuthProvider } from "@/lib/auth/AuthContext";
 import { ConfirmProvider } from "@/lib/confirm/ConfirmProvider";
+import "@/lib/i18n";
 import { StreamProvider } from "@/lib/stream/StreamProvider";
 import { ToastProvider } from "@/lib/toast/ToastContext";
 import "@/styles/globals.css";

@@ -160,9 +160,13 @@ async def model_info(session: SessionDep) -> ModelInfoOut:
         db_id=db_id,
         is_active=is_active,
         threshold=settings.detection_threshold,
+        class_thresholds=settings.detection_class_thresholds,
         benign_label=settings.detection_benign_label,
         expected_feature_coverage=bundle.metadata.get("expected_feature_coverage"),
         calibrated=bool((bundle.metadata.get("calibration") or {}).get("calibrated", False)),
+        calibration=bundle.metadata.get("calibration"),
+        feature_set=bundle.metadata.get("feature_set"),
+        profile=bundle.metadata.get("profile"),
     )
 
 
@@ -180,6 +184,7 @@ async def predict(request: PredictRequest) -> list[PredictionOut]:
         request.flows,
         threshold=settings.detection_threshold,
         benign_label=settings.detection_benign_label,
+        class_thresholds=settings.detection_class_thresholds,
     )
     return [_to_out(p) for p in predictions]
 
@@ -203,6 +208,7 @@ async def detect_one(session: SessionDep, event_id: int) -> PredictionOut:
         [event],
         threshold=settings.detection_threshold,
         benign_label=settings.detection_benign_label,
+        class_thresholds=settings.detection_class_thresholds,
     )
     return _to_out(predictions[0])
 
@@ -238,6 +244,7 @@ async def detect_many(session: SessionDep, request: BatchEventRequest) -> list[P
         ordered,
         threshold=settings.detection_threshold,
         benign_label=settings.detection_benign_label,
+        class_thresholds=settings.detection_class_thresholds,
     )
     return [_to_out(p) for p in predictions]
 
@@ -270,6 +277,7 @@ async def run_recent(session: SessionDep, request: RunRequest) -> RunSummary:
         events,
         threshold=settings.detection_threshold,
         benign_label=settings.detection_benign_label,
+        class_thresholds=settings.detection_class_thresholds,
     )
 
     by_label = Counter(p.predicted_label for p in predictions)

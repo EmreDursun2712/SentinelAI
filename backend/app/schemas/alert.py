@@ -118,6 +118,29 @@ class AlertTimeseriesOut(BaseModel):
     points: list[AlertTimeseriesPoint] = Field(default_factory=list)
 
 
+class AlertClusterOut(BaseModel):
+    """A correlated incident: repeated alerts from one source/family collapsed."""
+
+    correlation_key: str
+    src_ip: IpString
+    prediction: str
+    count: int
+    open_count: int
+    first_seen: datetime
+    last_seen: datetime
+    activity_span_seconds: float
+    max_severity: Severity | None = None
+    max_priority: float | None = None
+    distinct_destinations: int
+    alert_ids: list[int] = Field(default_factory=list)
+
+
+class AlertClusterListOut(BaseModel):
+    window_hours: int
+    total_clusters: int
+    items: list[AlertClusterOut] = Field(default_factory=list)
+
+
 class DashboardOverviewOut(BaseModel):
     """Single payload powering the SOC dashboard's KPI cards + charts."""
 
