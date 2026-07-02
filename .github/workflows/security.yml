@@ -37,8 +37,14 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
-      # Practical threshold: fail only on high/critical advisories.
-      - name: npm audit (high+)
+      # Gate on what actually ships: high/critical advisories in *production*
+      # dependencies. Build/test tooling (vite, vitest, esbuild) never reaches a
+      # user, so its dev-only advisories shouldn't red the board.
+      - name: npm audit — production deps (high+, gating)
+        run: npm audit --omit=dev --audit-level=high
+      # Full dev+prod audit for visibility, without failing the build.
+      - name: npm audit — full (advisory)
+        continue-on-error: true
         run: npm audit --audit-level=high
 
   sbom:

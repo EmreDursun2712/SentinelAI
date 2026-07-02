@@ -23,9 +23,7 @@ async def test_reset_demo_requires_auth(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_reset_demo_forbidden_for_non_admin(client: AsyncClient) -> None:
-    response = await client.post(
-        "/api/v1/admin/reset-demo", headers=_auth_header(Role.ANALYST)
-    )
+    response = await client.post("/api/v1/admin/reset-demo", headers=_auth_header(Role.ANALYST))
     assert response.status_code == 403
 
 
@@ -33,7 +31,5 @@ async def test_reset_demo_forbidden_for_non_admin(client: AsyncClient) -> None:
 async def test_reset_demo_404_when_disabled(client: AsyncClient) -> None:
     # Default config keeps the feature off, so even an ADMIN gets a 404 — the
     # endpoint is invisible and inert outside an explicitly enabled demo.
-    response = await client.post(
-        "/api/v1/admin/reset-demo", headers=_auth_header(Role.ADMIN)
-    )
+    response = await client.post("/api/v1/admin/reset-demo", headers=_auth_header(Role.ADMIN))
     assert response.status_code == 404

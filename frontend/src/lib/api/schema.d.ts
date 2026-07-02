@@ -45,6 +45,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/alerts/correlated": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Correlated
+         * @description Correlated incidents: repeated alerts grouped by (source IP, family).
+         *
+         *     Collapses alert noise so an analyst sees "one PortScan campaign from
+         *     10.0.0.5 (37 alerts)" instead of 37 rows. Worst severity / highest volume
+         *     first. Computed at read time over the recent window.
+         */
+        get: operations["list_correlated_api_v1_alerts_correlated_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/alerts/stats": {
         parameters: {
             query?: never;
@@ -224,6 +248,23 @@ export interface paths {
         put?: never;
         /** Triage */
         post: operations["triage_api_v1_alerts__alert_id__triage_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Audit */
+        get: operations["list_audit_api_v1_audit_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -546,6 +587,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/hosts/{ip}/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Host Timeline */
+        get: operations["get_host_timeline_api_v1_hosts__ip__timeline_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ingest/flow": {
         parameters: {
             query?: never;
@@ -721,6 +779,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/models/promote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Promote Model
+         * @description Shadow-eval a candidate and auto-activate it only if the eval recommends it.
+         *
+         *     ADMIN-only. Runs the same label-aware A/B comparison as ``/shadow`` and, when
+         *     the recommendation is ``promote`` (candidate macro-F1 clears the active model
+         *     by the margin on enough labelled traffic), performs a real, audited
+         *     activation. Otherwise the active model is left untouched.
+         */
+        post: operations["promote_model_api_v1_models_promote_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/models/rollback": {
         parameters: {
             query?: never;
@@ -833,6 +916,30 @@ export interface paths {
         };
         /** Get Report Markdown */
         get: operations["get_report_markdown_api_v1_reports__report_id__markdown_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/{report_id}/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Report Pdf
+         * @description Return the report as a downloadable PDF.
+         *
+         *     Serves the file written at generation time when present; otherwise renders
+         *     on the fly from the stored markdown so a PDF is always available (and older
+         *     reports predating PDF generation still download).
+         */
+        get: operations["get_report_pdf_api_v1_reports__report_id__pdf_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1196,6 +1303,50 @@ export interface components {
          * @enum {string}
          */
         AgentName: "DETECTION" | "TRIAGE" | "RESPONSE" | "INVESTIGATION" | "REPORTING" | "ANALYST";
+        /** AlertClusterListOut */
+        AlertClusterListOut: {
+            /** Items */
+            items?: components["schemas"]["AlertClusterOut"][];
+            /** Total Clusters */
+            total_clusters: number;
+            /** Window Hours */
+            window_hours: number;
+        };
+        /**
+         * AlertClusterOut
+         * @description A correlated incident: repeated alerts from one source/family collapsed.
+         */
+        AlertClusterOut: {
+            /** Activity Span Seconds */
+            activity_span_seconds: number;
+            /** Alert Ids */
+            alert_ids?: number[];
+            /** Correlation Key */
+            correlation_key: string;
+            /** Count */
+            count: number;
+            /** Distinct Destinations */
+            distinct_destinations: number;
+            /**
+             * First Seen
+             * Format: date-time
+             */
+            first_seen: string;
+            /**
+             * Last Seen
+             * Format: date-time
+             */
+            last_seen: string;
+            /** Max Priority */
+            max_priority?: number | null;
+            max_severity?: components["schemas"]["Severity"] | null;
+            /** Open Count */
+            open_count: number;
+            /** Prediction */
+            prediction: string;
+            /** Src Ip */
+            src_ip: string;
+        };
         /** AlertDecisionOut */
         AlertDecisionOut: {
             agent: components["schemas"]["AgentName"];
@@ -1478,6 +1629,37 @@ export interface components {
             analyst_id?: string | null;
             /** Note */
             note?: string | null;
+        };
+        /** AuditEntryOut */
+        AuditEntryOut: {
+            /** Action */
+            action: string;
+            /** Actor */
+            actor?: string | null;
+            /** Category */
+            category: string;
+            /** Detail */
+            detail?: string | null;
+            /** Id */
+            id: string;
+            /** Target */
+            target?: string | null;
+            /**
+             * Timestamp
+             * Format: date-time
+             */
+            timestamp: string;
+        };
+        /** AuditListOut */
+        AuditListOut: {
+            /** Has More */
+            has_more: boolean;
+            /** Items */
+            items: components["schemas"]["AuditEntryOut"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
         };
         /** BatchEventRequest */
         BatchEventRequest: {
@@ -1775,6 +1957,18 @@ export interface components {
          * @enum {string}
          */
         ExecutionMode: "SIMULATED" | "LAB";
+        /**
+         * FeatureContributionItem
+         * @description One feature's signed push toward the predicted class for this alert.
+         */
+        FeatureContributionItem: {
+            /** Contribution */
+            contribution: number;
+            /** Feature */
+            feature: string;
+            /** Value */
+            value?: number | null;
+        };
         /** FeatureImportanceItem */
         FeatureImportanceItem: {
             /** Feature */
@@ -1860,6 +2054,34 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** HostTimelineOut */
+        HostTimelineOut: {
+            /** Ip */
+            ip: string;
+            /** Items */
+            items?: components["schemas"]["TimelineEntryOut"][];
+            summary: components["schemas"]["HostTimelineSummary"];
+            /** Window Hours */
+            window_hours: number;
+        };
+        /** HostTimelineSummary */
+        HostTimelineSummary: {
+            /** Alert Count */
+            alert_count: number;
+            /** Event Count */
+            event_count: number;
+            /** Families */
+            families?: string[];
+            /** First Seen */
+            first_seen?: string | null;
+            /** Ip */
+            ip: string;
+            /** Last Seen */
+            last_seen?: string | null;
+            max_severity?: components["schemas"]["Severity"] | null;
+            /** Response Count */
+            response_count: number;
         };
         /**
          * IncidentKind
@@ -2010,6 +2232,7 @@ export interface components {
             alerts_window_hours: number;
             /** Events Window Minutes */
             events_window_minutes: number;
+            explanation?: components["schemas"]["PredictionExplanation"] | null;
             /** Feature Importance */
             feature_importance?: components["schemas"]["FeatureImportanceItem"][];
             /**
@@ -2133,6 +2356,14 @@ export interface components {
             benign_label?: string | null;
             /** Calibrated */
             calibrated?: boolean | null;
+            /** Calibration */
+            calibration?: {
+                [key: string]: unknown;
+            } | null;
+            /** Class Thresholds */
+            class_thresholds?: {
+                [key: string]: number;
+            };
             /** Classes */
             classes?: string[];
             /** Db Id */
@@ -2141,6 +2372,8 @@ export interface components {
             expected_feature_coverage?: number | null;
             /** Feature Order */
             feature_order?: string[];
+            /** Feature Set */
+            feature_set?: string | null;
             /** Is Active */
             is_active?: boolean | null;
             /** Loaded */
@@ -2153,6 +2386,8 @@ export interface components {
             };
             /** Name */
             name?: string | null;
+            /** Profile */
+            profile?: string | null;
             /** Threshold */
             threshold?: number | null;
             /** Version */
@@ -2226,6 +2461,24 @@ export interface components {
             /** Flows */
             flows: components["schemas"]["FlowRecordIn"][];
         };
+        /**
+         * PredictionExplanation
+         * @description Local, per-prediction attribution (why *this* alert got *this* class).
+         */
+        PredictionExplanation: {
+            /** Base Value */
+            base_value: number;
+            /** Contribution Sum */
+            contribution_sum: number;
+            /** Contributions */
+            contributions?: components["schemas"]["FeatureContributionItem"][];
+            /** Explained Class */
+            explained_class: string;
+            /** Method */
+            method: string;
+            /** Model Probability */
+            model_probability?: number | null;
+        };
         /** PredictionOut */
         PredictionOut: {
             /** Alert Created */
@@ -2246,6 +2499,27 @@ export interface components {
             predicted_label: string;
             /** Threshold */
             threshold: number;
+        };
+        /** PromoteRequest */
+        PromoteRequest: {
+            /** Candidate Version Id */
+            candidate_version_id: number;
+            /**
+             * Window Hours
+             * @default 24
+             */
+            window_hours: number;
+        };
+        /**
+         * PromoteResult
+         * @description Outcome of an auto-promote attempt: the eval + whether it activated.
+         */
+        PromoteResult: {
+            /** Active Version Id */
+            active_version_id: number | null;
+            evaluation: components["schemas"]["ShadowEvalOut"];
+            /** Promoted */
+            promoted: boolean;
         };
         /** RecommendResponse */
         RecommendResponse: {
@@ -2573,6 +2847,10 @@ export interface components {
             metrics?: {
                 [key: string]: unknown;
             };
+            /** Recommendation */
+            recommendation?: {
+                [key: string]: unknown;
+            } | null;
             /** Sample Count */
             sample_count: number;
             /**
@@ -2647,6 +2925,27 @@ export interface components {
          * @enum {string}
          */
         TaskStatus: "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED";
+        /** TimelineEntryOut */
+        TimelineEntryOut: {
+            /** Alert Id */
+            alert_id?: number | null;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label?: string | null;
+            /** Phase */
+            phase: string;
+            /** Prediction */
+            prediction?: string | null;
+            severity?: components["schemas"]["Severity"] | null;
+            /**
+             * Timestamp
+             * Format: date-time
+             */
+            timestamp: string;
+            /** Title */
+            title: string;
+        };
         /** TimelineItem */
         TimelineItem: {
             /** Alert Id */
@@ -2901,6 +3200,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AlertOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_correlated_api_v1_alerts_correlated_get: {
+        parameters: {
+            query?: {
+                window_hours?: number;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                sentinelai_access?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertClusterListOut"];
                 };
             };
             /** @description Validation Error */
@@ -3308,6 +3643,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TriageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_audit_api_v1_audit_get: {
+        parameters: {
+            query?: {
+                category?: string[] | null;
+                limit?: number;
+                offset?: number;
+                since?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                sentinelai_access?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditListOut"];
                 };
             };
             /** @description Validation Error */
@@ -3910,6 +4283,43 @@ export interface operations {
             };
         };
     };
+    get_host_timeline_api_v1_hosts__ip__timeline_get: {
+        parameters: {
+            query?: {
+                window_hours?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                ip: string;
+            };
+            cookie?: {
+                sentinelai_access?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostTimelineOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     ingest_flow_api_v1_ingest_flow_post: {
         parameters: {
             query?: never;
@@ -4230,6 +4640,43 @@ export interface operations {
             };
         };
     };
+    promote_model_api_v1_models_promote_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                sentinelai_access?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PromoteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromoteResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     rollback_model_api_v1_models_rollback_post: {
         parameters: {
             query?: never;
@@ -4491,6 +4938,39 @@ export interface operations {
         };
     };
     get_report_markdown_api_v1_reports__report_id__markdown_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                report_id: number;
+            };
+            cookie?: {
+                sentinelai_access?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_report_pdf_api_v1_reports__report_id__pdf_get: {
         parameters: {
             query?: never;
             header?: {
