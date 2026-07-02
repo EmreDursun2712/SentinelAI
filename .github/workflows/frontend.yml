@@ -45,11 +45,17 @@ jobs:
       # Layer the CI override (backend without --reload) over the base compose so
       # every `docker compose` call in this job uses it.
       COMPOSE_FILE: docker-compose.yml:docker-compose.ci.yml
+      # Use 127.0.0.1, not localhost: the runner's Docker publishes ports on IPv4
+      # (0.0.0.0) only, but Node/`localhost` resolves to ::1 (IPv6) first, so
+      # host-side checks and the browser's API calls to `localhost` fail. Forcing
+      # IPv4 fixes both the readiness poll and the SPA→backend fetches.
+      VITE_API_BASE_URL: http://127.0.0.1:8000/api/v1
+      VITE_WS_BASE_URL: ws://127.0.0.1:8000/api/v1
       BACKEND_BOOTSTRAP_ADMIN_USERNAME: admin
       BACKEND_BOOTSTRAP_ADMIN_PASSWORD: "Sentinel-Demo-2026!"
       PLAYWRIGHT_USER: admin
       PLAYWRIGHT_PASSWORD: "Sentinel-Demo-2026!"
-      PLAYWRIGHT_BASE_URL: http://localhost:5173
+      PLAYWRIGHT_BASE_URL: http://127.0.0.1:5173
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -64,21 +70,20 @@ jobs:
         run: |
           pip install -e ml
           python -m ml.train --synthetic 20000
-      - name: Start data stores + backend (wait for healthchecks)
-        # `--wait` blocks until each service's compose healthcheck passes — for
-        # the backend that's an in-container curl to /health, which is far more
-        # reliable than polling the published port from the runner host. The
-        # image entrypoint runs `alembic upgrade head` before uvicorn, so a
-        # healthy backend already has migrations applied (no separate step).
-        run: docker compose up -d --wait --wait-timeout 240 --build postgres redis backend
+      - name: Start the stack (wait for healthchecks)
+        # `--wait` blocks until every service's compose healthcheck passes (the
+        # backend's and frontend's are in-container curls), so we don't depend on
+        # host-side polling to decide readiness. The image entrypoint runs
+        # `alembic upgrade head` before uvicorn, so a healthy backend already has
+        # migrations applied (no separate migrate step).
+        run: docker compose up -d --wait --wait-timeout 300 --build postgres redis backend frontend
+      - name: Sanity-check host reachability (IPv4)
+        run: |
+          curl -fsS --retry 10 --retry-delay 3 --retry-all-errors http://127.0.0.1:8000/health
+          curl -fsS --retry 10 --retry-delay 3 --retry-all-errors -o /dev/null http://127.0.0.1:5173/
       - name: Backend logs (diagnostics)
-        run: docker compose logs --no-color backend | tail -60
-      - name: Start the frontend
-        run: docker compose up -d --build frontend
-      - name: Wait for the host ports
-        # Backend is already healthy via --wait, so this returns immediately for
-        # :8000 and just waits on the Vite dev server for :5173.
-        run: npx wait-on http://localhost:5173 http://localhost:8000/health -t 120000
+        if: always()
+        run: docker compose logs --no-color backend | tail -80
       - name: Install Playwright browsers
         working-directory: frontend
         run: |
