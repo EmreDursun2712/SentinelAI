@@ -246,8 +246,20 @@ interface ReportViewerProps {
   reportId: number | null;
 }
 
+function triggerDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 function ReportViewer(p: ReportViewerProps) {
   const [copied, setCopied] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
 
   if (!p.isSelected) {
     return (
@@ -280,14 +292,20 @@ function ReportViewer(p: ReportViewerProps) {
 
   const handleDownload = () => {
     const blob = new Blob([p.markdown], { type: "text/markdown;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `report-${p.reportId ?? "unknown"}.md`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    triggerDownload(blob, `report-${p.reportId ?? "unknown"}.md`);
+  };
+
+  const handleDownloadPdf = async () => {
+    if (p.reportId == null) return;
+    setPdfBusy(true);
+    try {
+      const blob = await reportsApi.getReportPdf(p.reportId);
+      triggerDownload(blob, `report-${p.reportId}.pdf`);
+    } catch {
+      /* surfaced by the disabled state resetting; keep the UI quiet */
+    } finally {
+      setPdfBusy(false);
+    }
   };
 
   return (
@@ -322,8 +340,16 @@ function ReportViewer(p: ReportViewerProps) {
             <Button variant="secondary" size="sm" onClick={handleCopy}>
               {copied ? "Copied" : "Copy markdown"}
             </Button>
-            <Button variant="primary" size="sm" onClick={handleDownload}>
+            <Button variant="secondary" size="sm" onClick={handleDownload}>
               Download .md
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleDownloadPdf}
+              disabled={pdfBusy || p.reportId == null}
+            >
+              {pdfBusy ? "Preparing…" : "Download PDF"}
             </Button>
           </div>
         </div>

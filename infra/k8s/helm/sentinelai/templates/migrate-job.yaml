@@ -1,0 +1,38 @@
+{{- if .Values.migrations.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sentinelai.fullname" . }}-migrate
+  labels:
+    {{- include "sentinelai.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migrate
+  annotations:
+    # Run once before the app comes up (and before each upgrade). Idempotent —
+    # alembic no-ops when already at head.
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        {{- include "sentinelai.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: migrate
+    spec:
+      restartPolicy: Never
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: migrate
+          image: {{ include "sentinelai.backendImage" . }}
+          imagePullPolicy: {{ .Values.image.backend.pullPolicy }}
+          command: ["alembic", "upgrade", "head"]
+          envFrom:
+            - configMapRef:
+                name: {{ include "sentinelai.fullname" . }}-config
+            - secretRef:
+                name: {{ include "sentinelai.secretName" . }}
+{{- end }}

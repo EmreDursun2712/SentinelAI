@@ -55,6 +55,7 @@ async def run_detection(session: AsyncSession, task_id: str) -> None:
             events,
             threshold=settings.detection_threshold,
             benign_label=settings.detection_benign_label,
+            class_thresholds=settings.detection_class_thresholds,
         )
         await task_service.mark_succeeded(
             session,
@@ -251,3 +252,15 @@ async def retention_cleanup_task(ctx: dict, task_id: str) -> None:
 async def ml_retrain_task(ctx: dict, task_id: str) -> None:
     async with session_scope() as session:
         await run_ml_retrain(session, task_id)
+
+
+async def notify_task(ctx: dict, payload: dict) -> None:
+    """Fan an alert notification out to the configured external channels.
+
+    Unlike the other jobs this carries its own ``payload`` (no ``Task`` row) —
+    notifications are fire-and-forget, best-effort, and never surface as tracked
+    background tasks.
+    """
+    from app.services.notification_service import NotificationPayload, dispatch
+
+    await dispatch(get_settings(), NotificationPayload.from_dict(payload))

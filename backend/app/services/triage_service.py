@@ -218,4 +218,18 @@ async def update_disposition(
     )
     if new_disposition in terminal:
         await publish_event(EventType.ALERT_CLOSED, {"alert_id": alert.id})
+
+    # A confirmed true-positive fans out to external channels (best-effort, gated).
+    if new_disposition == AlertDisposition.CONFIRMED:
+        from app.services.notification_service import notify_alert
+
+        await notify_alert(
+            alert_id=alert.id,
+            prediction=alert.prediction,
+            severity=alert.severity.value if alert.severity else None,
+            src_ip=str(alert.src_ip) if alert.src_ip else None,
+            dst_ip=str(alert.dst_ip) if alert.dst_ip else None,
+            confidence=alert.confidence,
+            reason="confirmed",
+        )
     return alert

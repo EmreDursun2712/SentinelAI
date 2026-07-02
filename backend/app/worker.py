@@ -25,6 +25,7 @@ from app.tasks.jobs import (
     detection_run_task,
     drift_run_task,
     ml_retrain_task,
+    notify_task,
     report_alert_task,
     retention_cleanup_task,
 )
@@ -77,6 +78,7 @@ class WorkerSettings:
         drift_run_task,
         retention_cleanup_task,
         ml_retrain_task,
+        notify_task,
     ]
     on_startup = on_startup
     on_shutdown = on_shutdown

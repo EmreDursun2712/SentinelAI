@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sentinelai.fullname" . }}-worker
+  labels:
+    {{- include "sentinelai.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  replicas: {{ .Values.worker.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "sentinelai.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        {{- include "sentinelai.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: worker
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: worker
+          image: {{ include "sentinelai.backendImage" . }}
+          imagePullPolicy: {{ .Values.image.backend.pullPolicy }}
+          command: ["arq", "app.worker.WorkerSettings"]
+          envFrom:
+            - configMapRef:
+                name: {{ include "sentinelai.fullname" . }}-config
+            - secretRef:
+                name: {{ include "sentinelai.secretName" . }}
+          livenessProbe:
+            exec:
+              command: ["arq", "--check", "app.worker.WorkerSettings"]
+            initialDelaySeconds: 20
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

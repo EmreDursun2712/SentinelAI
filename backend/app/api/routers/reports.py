@@ -10,13 +10,14 @@ Surface:
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
 from app.api.deps import SessionDep, rate_limit
 from app.api.pagination import set_total_count
-from app.core.errors import NotFoundError
+from app.core.errors import AppError, NotFoundError
 from app.models.enums import IncidentKind
 from app.schemas.reporting import (
     DailySummaryEnvelope,
@@ -28,6 +29,7 @@ from app.services.reporting_service import (
     generate_daily_summary,
     get_report,
     list_reports,
+    render_report_pdf_bytes,
 )
 
 router = APIRouter(prefix="/reports")
@@ -87,3 +89,36 @@ async def get_report_markdown(session: SessionDep, report_id: int) -> Response:
         raise NotFoundError(f"IncidentReport {report_id} not found.")
     markdown = (report.summary or {}).get("markdown", "")
     return Response(content=markdown, media_type="text/markdown; charset=utf-8")
+
+
+@router.get("/{report_id}/pdf", response_class=Response)
+async def get_report_pdf(session: SessionDep, report_id: int) -> Response:
+    """Return the report as a downloadable PDF.
+
+    Serves the file written at generation time when present; otherwise renders
+    on the fly from the stored markdown so a PDF is always available (and older
+    reports predating PDF generation still download).
+    """
+    report = await get_report(session, report_id)
+    if report is None:
+        raise NotFoundError(f"IncidentReport {report_id} not found.")
+
+    pdf: bytes | None = None
+    if report.pdf_path:
+        try:
+            data = Path(report.pdf_path).read_bytes()
+            pdf = data or None
+        except OSError:
+            pdf = None
+    if pdf is None:
+        markdown = (report.summary or {}).get("markdown", "")
+        pdf = render_report_pdf_bytes(markdown, report.title)
+    if pdf is None:
+        raise AppError("PDF rendering is unavailable for this report.")
+
+    filename = f"report-{report.id}.pdf"
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

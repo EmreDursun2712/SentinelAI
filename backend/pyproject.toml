@@ -36,6 +36,9 @@ dependencies = [
     "joblib>=1.4",
     "redis>=5.0",
     "prometheus-client>=0.20",
+    # Pure-Python PDF generation for incident reports (no system libs, unlike
+    # weasyprint). Renders the report markdown into a downloadable PDF.
+    "reportlab>=4.2",
     # Async (asyncio-native) Redis task queue — fits the async backend; the
     # worker calls the same async services directly. See docs/TASK_QUEUE.md.
     "arq>=0.26",
@@ -81,6 +84,29 @@ asyncio_mode = "auto"
 addopts = "-ra --strict-markers -m 'not integration'"
 markers = [
     "integration: real-database tests; require Docker (run with `pytest -m integration`).",
+]
+
+# Coverage is opt-in on the command line (`pytest --cov=app`) so the default run
+# stays fast; CI adds `--cov` and the fail_under gate below keeps it from slipping.
+[tool.coverage.run]
+source = ["app"]
+branch = false
+omit = [
+    "app/scripts/*",
+    "app/worker.py",  # process entrypoint, exercised only under a live arq worker
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+# Floor for the DB-free unit suite (integration tests run in a separate job and
+# cover the rest). Kept below the current ~68% so a small refactor doesn't red CI.
+fail_under = 60
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "\\.\\.\\.",
 ]
 
 [tool.ruff]

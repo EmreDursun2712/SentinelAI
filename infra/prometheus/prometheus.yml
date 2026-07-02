@@ -1,0 +1,25 @@
+# Prometheus scrape config for the SentinelAI observability profile.
+# Started via `docker compose --profile observability up`. The backend exposes
+# Prometheus metrics at /metrics (unauthenticated by design — restrict at the
+# network, which Compose does by keeping it on the internal bridge).
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: sentinelai
+
+scrape_configs:
+  - job_name: sentinelai-backend
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["backend:8000"]
+        labels:
+          service: backend
+
+  # The arq worker doesn't serve HTTP; backend metrics cover detection/report/
+  # drift counters it drives (they share the same DB-backed counters at scrape
+  # time). Add a worker exporter here if you later expose one.
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

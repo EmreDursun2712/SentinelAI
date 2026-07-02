@@ -1,0 +1,108 @@
+# Default values for the SentinelAI Helm chart.
+# Override with `-f my-values.yaml` or `--set key=value`.
+
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  # Backend + worker share one image (same code, different entrypoint).
+  backend:
+    repository: ghcr.io/emredursun2712/sentinelai-backend
+    tag: "" # defaults to .Chart.AppVersion
+    pullPolicy: IfNotPresent
+  frontend:
+    repository: ghcr.io/emredursun2712/sentinelai-frontend
+    tag: ""
+    pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# Non-secret env (SENTINEL_*) injected into backend + worker via a ConfigMap.
+config:
+  SENTINEL_ENV: "production"
+  SENTINEL_LOG_LEVEL: "info"
+  SENTINEL_METRICS_ENABLED: "true"
+  SENTINEL_RATE_LIMIT_ENABLED: "true"
+  SENTINEL_CORS_ORIGINS: "https://sentinelai.example.com"
+  SENTINEL_AUTH_COOKIE_SECURE: "true"
+  SENTINEL_AUTH_COOKIE_SAMESITE: "lax"
+  SENTINEL_NOTIFICATIONS_ENABLED: "false"
+  SENTINEL_NOTIFY_MIN_SEVERITY: "HIGH"
+
+# Secret env (SENTINEL_*) injected via a Secret. Set real values in prod, or
+# point existingSecret at a pre-created Secret and leave these empty.
+existingSecret: ""
+secrets:
+  SENTINEL_DATABASE_URL: "postgresql+psycopg://sentinelai:sentinelai@sentinelai-postgres:5432/sentinelai"
+  SENTINEL_REDIS_URL: "redis://sentinelai-redis:6379/0"
+  SENTINEL_JWT_SECRET: "change-me-in-production"
+  SENTINEL_API_KEY: "change-me-in-production"
+  SENTINEL_BOOTSTRAP_ADMIN_USERNAME: "admin"
+  SENTINEL_BOOTSTRAP_ADMIN_PASSWORD: "change-me-strong-password"
+
+backend:
+  replicaCount: 2
+  port: 8000
+  resources:
+    requests: { cpu: "100m", memory: "256Mi" }
+    limits: { cpu: "1", memory: "1Gi" }
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+  # ml_artifacts are baked into the image at /app/ml_artifacts by default.
+  service:
+    type: ClusterIP
+
+worker:
+  replicaCount: 1
+  resources:
+    requests: { cpu: "100m", memory: "256Mi" }
+    limits: { cpu: "1", memory: "1Gi" }
+
+frontend:
+  replicaCount: 2
+  port: 5173
+  resources:
+    requests: { cpu: "50m", memory: "128Mi" }
+    limits: { cpu: "500m", memory: "512Mi" }
+  service:
+    type: ClusterIP
+
+# Run `alembic upgrade head` as a pre-install/pre-upgrade Job so migrations
+# happen exactly once (not racily on every backend replica).
+migrations:
+  enabled: true
+
+# Bundled Postgres/Redis for a self-contained deploy. Disable and point the
+# secrets at managed services (RDS/ElastiCache/Cloud SQL) for production.
+postgres:
+  enabled: true
+  image: postgres:16-alpine
+  storage: 5Gi
+  auth:
+    username: sentinelai
+    password: sentinelai
+    database: sentinelai
+
+redis:
+  enabled: true
+  image: redis:7-alpine
+
+ingress:
+  enabled: false
+  className: nginx
+  host: sentinelai.example.com
+  tls:
+    enabled: false
+    secretName: sentinelai-tls
+  annotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

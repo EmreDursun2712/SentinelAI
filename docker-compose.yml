@@ -72,6 +72,17 @@ services:
       SENTINEL_RESPONSE_EXECUTOR: ${BACKEND_RESPONSE_EXECUTOR:-simulated}
       SENTINEL_RESPONSE_ALLOWED_CIDRS: ${BACKEND_RESPONSE_ALLOWED_CIDRS:-}
       SENTINEL_RESPONSE_MAX_BLOCK_MINUTES: ${BACKEND_RESPONSE_MAX_BLOCK_MINUTES:-60}
+      # External notifications (off by default). See docs/NOTIFICATIONS.md.
+      SENTINEL_NOTIFICATIONS_ENABLED: ${BACKEND_NOTIFICATIONS_ENABLED:-false}
+      SENTINEL_NOTIFY_MIN_SEVERITY: ${BACKEND_NOTIFY_MIN_SEVERITY:-HIGH}
+      SENTINEL_SLACK_WEBHOOK_URL: ${BACKEND_SLACK_WEBHOOK_URL:-}
+      SENTINEL_NOTIFY_WEBHOOK_URL: ${BACKEND_NOTIFY_WEBHOOK_URL:-}
+      SENTINEL_SMTP_HOST: ${BACKEND_SMTP_HOST:-}
+      SENTINEL_SMTP_PORT: ${BACKEND_SMTP_PORT:-587}
+      SENTINEL_SMTP_USERNAME: ${BACKEND_SMTP_USERNAME:-}
+      SENTINEL_SMTP_PASSWORD: ${BACKEND_SMTP_PASSWORD:-}
+      SENTINEL_SMTP_FROM: ${BACKEND_SMTP_FROM:-}
+      SENTINEL_NOTIFY_EMAIL_TO: ${BACKEND_NOTIFY_EMAIL_TO:-}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
@@ -108,6 +119,17 @@ services:
       SENTINEL_LOG_LEVEL: ${BACKEND_LOG_LEVEL:-info}
       SENTINEL_RETENTION_DAYS: ${BACKEND_RETENTION_DAYS:-90}
       SENTINEL_ML_RETRAIN_ENABLED: ${BACKEND_ML_RETRAIN_ENABLED:-false}
+      # The worker runs notify_task → needs the notification channel config too.
+      SENTINEL_NOTIFICATIONS_ENABLED: ${BACKEND_NOTIFICATIONS_ENABLED:-false}
+      SENTINEL_NOTIFY_MIN_SEVERITY: ${BACKEND_NOTIFY_MIN_SEVERITY:-HIGH}
+      SENTINEL_SLACK_WEBHOOK_URL: ${BACKEND_SLACK_WEBHOOK_URL:-}
+      SENTINEL_NOTIFY_WEBHOOK_URL: ${BACKEND_NOTIFY_WEBHOOK_URL:-}
+      SENTINEL_SMTP_HOST: ${BACKEND_SMTP_HOST:-}
+      SENTINEL_SMTP_PORT: ${BACKEND_SMTP_PORT:-587}
+      SENTINEL_SMTP_USERNAME: ${BACKEND_SMTP_USERNAME:-}
+      SENTINEL_SMTP_PASSWORD: ${BACKEND_SMTP_PASSWORD:-}
+      SENTINEL_SMTP_FROM: ${BACKEND_SMTP_FROM:-}
+      SENTINEL_NOTIFY_EMAIL_TO: ${BACKEND_NOTIFY_EMAIL_TO:-}
     volumes:
       - ./backend:/app
       - ./ml/artifacts:/app/ml_artifacts:ro
@@ -172,6 +194,44 @@ services:
       # Mount your authorized lab's flow logs here, read-only.
       - ${SENSOR_LOG_DIR:-./sensor/samples}:/logs:ro
 
+  # ---- Observability stack (OFF by default) --------------------------------
+  # Start with:  docker compose --profile observability up -d prometheus grafana
+  # Prometheus scrapes the backend's /metrics; Grafana auto-provisions the
+  # datasource + the "SentinelAI — Overview" dashboard. See docs/OBSERVABILITY.md.
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: sentinelai-prometheus
+    profiles: ["observability"]
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=15d"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: sentinelai-grafana
+    profiles: ["observability"]
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+
 volumes:
   postgres_data:
   frontend_node_modules:
+  prometheus_data:
+  grafana_data:

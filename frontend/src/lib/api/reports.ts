@@ -1,3 +1,4 @@
+import { getToken } from "@/lib/auth/token";
 import type { GenericReportOut, IncidentKind, IncidentReportListItem } from "@/lib/types";
 import { API_BASE, qs, request } from "./client";
 
@@ -25,6 +26,19 @@ export async function getReportMarkdown(id: number): Promise<string> {
     throw new Error(`Markdown fetch failed: ${response.status}`);
   }
   return response.text();
+}
+
+/** Fetch the server-rendered PDF as a Blob (authenticated). */
+export async function getReportPdf(id: number): Promise<Blob> {
+  const token = getToken();
+  const response = await fetch(`${API_BASE}/reports/${id}/pdf`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    credentials: "include",
+  });
+  if (!response.ok) {
+    throw new Error(`PDF fetch failed: ${response.status}`);
+  }
+  return response.blob();
 }
 
 export function runDailySummary(date?: string): Promise<{

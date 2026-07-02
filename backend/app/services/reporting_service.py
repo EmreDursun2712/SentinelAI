@@ -137,6 +137,9 @@ async def generate_alert_report(
     md_path = _maybe_write_markdown_file(report.id, packet.markdown)
     if md_path is not None:
         report.md_path = str(md_path)
+    pdf_path = _maybe_write_pdf_file(report.id, packet.markdown, title)
+    if pdf_path is not None:
+        report.pdf_path = str(pdf_path)
 
     # Refresh summary now that report_id + markdown are settled.
     report.summary = packet.model_dump(mode="json")
@@ -300,6 +303,9 @@ async def generate_daily_summary(
     md_path = _maybe_write_markdown_file(report.id, packet.markdown)
     if md_path is not None:
         report.md_path = str(md_path)
+    pdf_path = _maybe_write_pdf_file(report.id, packet.markdown, title)
+    if pdf_path is not None:
+        report.pdf_path = str(pdf_path)
     report.summary = packet.model_dump(mode="json")
 
     if commit:
@@ -923,4 +929,35 @@ def _maybe_write_markdown_file(report_id: int, markdown: str) -> Path | None:
             report_id=report_id,
             error=str(exc),
         )
+        return None
+
+
+def render_report_pdf_bytes(markdown: str, title: str) -> bytes | None:
+    """Render report markdown to PDF bytes; None if rendering is unavailable.
+
+    Imported lazily so a missing/broken reportlab never blocks report creation
+    (the markdown path is always available regardless).
+    """
+    try:
+        from app.services.pdf_renderer import render_report_pdf
+
+        return render_report_pdf(markdown, title=title)
+    except Exception as exc:  # pragma: no cover - defensive (import or render error)
+        logger.warning("report.pdf_render_failed", error=str(exc))
+        return None
+
+
+def _maybe_write_pdf_file(report_id: int, markdown: str, title: str) -> Path | None:
+    """Best-effort: render + persist the report PDF. Failure is non-fatal."""
+    pdf = render_report_pdf_bytes(markdown, title)
+    if pdf is None:
+        return None
+    try:
+        out_dir = Path(get_settings().reports_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        path = out_dir / f"report-{report_id}.pdf"
+        path.write_bytes(pdf)
+        return path
+    except OSError as exc:
+        logger.warning("report.pdf_write_failed", report_id=report_id, error=str(exc))
         return None

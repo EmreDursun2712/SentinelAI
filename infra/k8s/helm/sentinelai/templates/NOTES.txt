@@ -1,0 +1,25 @@
+SentinelAI has been deployed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+Components:
+  • backend  ({{ .Values.backend.replicaCount }} replicas{{ if .Values.backend.autoscaling.enabled }}, HPA {{ .Values.backend.autoscaling.minReplicas }}–{{ .Values.backend.autoscaling.maxReplicas }}{{ end }})
+  • worker   ({{ .Values.worker.replicaCount }} replica)
+  • frontend ({{ .Values.frontend.replicaCount }} replicas)
+  • postgres: {{ if .Values.postgres.enabled }}bundled{{ else }}external (via SENTINEL_DATABASE_URL){{ end }}
+  • redis:    {{ if .Values.redis.enabled }}bundled{{ else }}external (via SENTINEL_REDIS_URL){{ end }}
+
+{{- if .Values.ingress.enabled }}
+
+Open the dashboard at: http{{ if .Values.ingress.tls.enabled }}s{{ end }}://{{ .Values.ingress.host }}/
+{{- else }}
+
+No Ingress is enabled. Port-forward the frontend to try it locally:
+
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "sentinelai.fullname" . }}-frontend {{ .Values.frontend.port }}:{{ .Values.frontend.port }}
+{{- end }}
+
+Check readiness:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "sentinelai.fullname" . }}-backend {{ .Values.backend.port }}:{{ .Values.backend.port }}
+  curl localhost:{{ .Values.backend.port }}/readyz
+
+⚠  Rotate SENTINEL_JWT_SECRET, SENTINEL_API_KEY, and the bootstrap admin password
+   before exposing this deployment (see values.yaml `secrets:` / `existingSecret`).
