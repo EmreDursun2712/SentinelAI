@@ -15,6 +15,6 @@ export async function login(page: Page): Promise<void> {
   // dev server the first render of each route compiles on demand and can be slow
   // on a cold CI runner.
   await expect(page.getByRole("navigation", { name: /primary/i })).toBeVisible({
-    timeout: 30_000,
+    timeout: 45_000,
   });
 }
