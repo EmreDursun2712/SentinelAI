@@ -11,8 +11,10 @@ export async function login(page: Page): Promise<void> {
   await page.getByLabel("Username").fill(CREDENTIALS.username);
   await page.getByLabel("Password").fill(CREDENTIALS.password);
   await page.getByRole("button", { name: /sign in/i }).click();
-  // Sidebar nav appears once authenticated.
+  // Sidebar nav appears once authenticated. Generous timeout: against the Vite
+  // dev server the first render of each route compiles on demand and can be slow
+  // on a cold CI runner.
   await expect(page.getByRole("navigation", { name: /primary/i })).toBeVisible({
-    timeout: 15_000,
+    timeout: 30_000,
   });
 }

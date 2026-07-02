@@ -5,7 +5,9 @@ import { CREDENTIALS, login } from "./helpers";
 test.describe("authentication", () => {
   test("login takes the user to the dashboard", async ({ page }) => {
     await login(page);
-    await expect(page.getByRole("heading", { name: /^Dashboard$/ })).toBeVisible();
+    // Both the topbar title and the page header say "Dashboard"; scope to the
+    // first match rather than tripping Playwright's strict mode.
+    await expect(page.getByRole("heading", { name: /^Dashboard$/ }).first()).toBeVisible();
     // The signed-in username is shown in the topbar.
     await expect(page.getByText(CREDENTIALS.username, { exact: false })).toBeVisible();
   });

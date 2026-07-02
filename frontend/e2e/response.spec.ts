@@ -6,7 +6,8 @@ test.describe("response center", () => {
   test("approve a simulated pending action", async ({ page }) => {
     await login(page);
     await page.getByRole("link", { name: /response center/i }).click();
-    await expect(page.getByRole("heading", { name: /response center/i })).toBeVisible();
+    // Topbar title + page header both match; first() avoids strict mode.
+    await expect(page.getByRole("heading", { name: /response center/i }).first()).toBeVisible();
 
     const firstApprove = page.getByRole("button", { name: /^Approve$/ }).first();
     if (!(await firstApprove.isVisible().catch(() => false))) {

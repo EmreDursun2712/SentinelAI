@@ -17,10 +17,16 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
+  // Generous timeouts: against the compose Vite dev server, the first render of
+  // each route compiles on demand, which is slow on a cold CI runner.
+  timeout: 60_000,
+  expect: { timeout: 10_000 },
   use: {
     baseURL: BASE_URL,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
+    actionTimeout: 15_000,
+    navigationTimeout: 30_000,
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   // Start the built frontend unless an external base URL is provided. The backend
