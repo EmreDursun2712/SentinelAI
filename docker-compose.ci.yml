@@ -1,0 +1,13 @@
+# CI-only override for the end-to-end job. Layer it over the base compose:
+#   docker compose -f docker-compose.yml -f docker-compose.ci.yml up ...
+# (the e2e workflow sets COMPOSE_FILE so every `docker compose` call picks it up).
+#
+# Why: the dev backend runs uvicorn with `--reload`, which watches the
+# bind-mounted source via WatchFiles. On the CI runner's overlayfs that watcher
+# can enter a reload loop, and while the worker bounces the *published* port is
+# intermittently unavailable from the host — so the container healthcheck passes
+# (it hits a good moment) but the host-side wait-on times out. Running without
+# `--reload` makes the backend a stable, production-style process for the e2e.
+services:
+  backend:
+    command: []
